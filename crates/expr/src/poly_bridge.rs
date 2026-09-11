@@ -18,7 +18,7 @@ use std::sync::Arc;
 const MAX_FAST_TERMS: u128 = 1_000_000;
 
 /// 收集子树全部符号（符号表 id，去重）。
-fn collect_syms(inner: &Inner, id: u32, out: &mut Vec<u32>, depth: u32) {
+pub(crate) fn collect_syms(inner: &Inner, id: u32, out: &mut Vec<u32>, depth: u32) {
     assert!(depth <= 10_000, "表达式嵌套过深");
     match &inner.nodes[id as usize] {
         Node::Sym(s) => {
@@ -39,11 +39,12 @@ fn collect_syms(inner: &Inner, id: u32, out: &mut Vec<u32>, depth: u32) {
     }
 }
 
-/// 提取为多项式。返回（ring，变元 sym-id 表，多项式）。
-pub(crate) fn to_poly(inner: &Inner, id: u32) -> Option<(Arc<PolyRing>, Vec<u32>, Poly<Rational>)> {
-    let mut syms: Vec<u32> = Vec::new();
-    collect_syms(inner, id, &mut syms, 0);
-    // 变元序 = 名字节序升序（D6；跨构造路径确定性）
+/// 由符号 id 集合构造公共环：变元序 = 名字节序升序（D6；跨构造路径确定性）。
+/// 返回（ring，变元 sym-id 表按环序，sym-id → 变元下标）。
+pub(crate) fn ring_for(
+    inner: &Inner,
+    syms: &[u32],
+) -> (Arc<PolyRing>, Vec<u32>, HashMap<u32, usize>) {
     let mut named: Vec<(u32, String)> = syms
         .iter()
         .map(|&s| (s, inner.sym_names[s as usize].to_string()))
@@ -56,8 +57,26 @@ pub(crate) fn to_poly(inner: &Inner, id: u32) -> Option<(Arc<PolyRing>, Vec<u32>
         .enumerate()
         .map(|(i, &(s, _))| (s, i))
         .collect();
-    let p = poly_at(inner, id, &ring, &vi, 0)?;
+    (ring, var_ids, vi)
+}
+
+/// 提取为多项式。返回（ring，变元 sym-id 表，多项式）。
+pub(crate) fn to_poly(inner: &Inner, id: u32) -> Option<(Arc<PolyRing>, Vec<u32>, Poly<Rational>)> {
+    let mut syms: Vec<u32> = Vec::new();
+    collect_syms(inner, id, &mut syms, 0);
+    let (ring, var_ids, vi) = ring_for(inner, &syms);
+    let p = to_poly_with(inner, id, &ring, &vi)?;
     Some((ring, var_ids, p))
+}
+
+/// 在给定环与变元映射下提取（cancel 用：分子分母共享同一环）。
+pub(crate) fn to_poly_with(
+    inner: &Inner,
+    id: u32,
+    ring: &Arc<PolyRing>,
+    vi: &HashMap<u32, usize>,
+) -> Option<Poly<Rational>> {
+    poly_at(inner, id, ring, vi, 0)
 }
 
 fn poly_at(

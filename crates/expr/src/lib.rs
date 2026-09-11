@@ -177,6 +177,12 @@ impl Context {
         self.with(|c| c.expand_at(e.id, 0))
     }
 
+    /// 有理函数约化（L1）：分子分母的多项式公因子（gcd）约去。
+    /// 非多项式因子原样保留；无可约化时返回与输入同一节点。
+    pub fn cancel(&self, e: &Expr) -> Expr {
+        self.with(|c| c.cancel_at(e.id))
+    }
+
     /// 代换：按符号名替换子表达式（替换值须属同一 Context）。
     /// 重建经规范形构造器，`subst(e, x→x)` 与 `e` 同节点。
     pub fn subst(&self, e: &Expr, map: &[(&str, Expr)]) -> Expr {

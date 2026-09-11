@@ -589,3 +589,23 @@ arena 节点**（60 组 + 混合用例）。
 基准变化（release）：(1+x+y+z+w)^20 830 ms → **98 ms**（sympy 0.99 s，
 **10.1×**，达成 §7 跟踪指标）；^16 243 ms → 42 ms。M3 剩余：gcd/cancel
 （PRS + 本原 ℚ 表示）、numerica 后端决策点。
+
+## 16. M3 完成记录（2026-09-11）：gcd、cancel 与后端决策关闭
+
+- **除法与 gcd**（cas-poly/gcd.rs）：主单项式除法 `div_rem`（多除子，
+  域系数，Gröbner 归约原语）与 `exact_div`；`gcd` 为递归**本原 PRS**
+  （ℚ[x₁..xₙ] 视作 R[x₁]，伪除法只乘不除 + 每步取本原部分；一元情形
+  Euclid 兜底），结果本原规范化（ℚ 内容归一、主项系数为正）。
+  实现教训：`terms()` 是升序迭代器，取除式主项必须取**末项**——误取
+  首项会使商项指数构造过大、被除式主项不降反升，除法死循环（一元
+  gcd 测试实测挂起捕获）。
+- **cancel**（expr 层）：分解 数值系数·额外因子·num/den → 公共环
+  gcd 约化 → 规范形重建；gcd 单位符号差异（x-y 归一为 y-x）通过
+  "常分母并入系数 + 负号沉入多项式"吸收，输出与手写形态节点恒等。
+- **M3 硬门槛达成**：sympy cancel 对拍 1000 条 × 3 个 ℚ 点，
+  3000 比对 100% 语义一致、0 跳过；expand 对拍复跑 500 例仍 100%。
+- **numerica 决策点关闭（D2）**：实测 numerica v2.2 默认特性即 `gmp`
+  （rug → gmp-mpfr-sys 从源码编译 LGPL GMP，本机构建失败），替代特性
+  `no_gmp` 走 malachite（LGPL-3.0-only）——两条默认路径均不满足
+  "默认依赖图 MIT/Apache 兼容"规则。**num-bigint 维持默认后端**，
+  rug/GMP 保持 opt-in feature 不变。

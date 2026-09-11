@@ -56,6 +56,8 @@ fn parse_nd(s: &str) -> Option<Rational> {
 pub(crate) fn run(args: &[String]) -> ExitCode {
     let cases: usize = crate::arg(args, "--cases", "1000").parse().unwrap_or(1000);
     let seed: u64 = crate::arg(args, "--seed", "42").parse().unwrap_or(42);
+    let op_cancel = crate::arg(args, "--op", "expand") == "cancel";
+    let tag = if op_cancel { "C" } else { "E" };
     let ctx = Context::new();
     let mut rng = Lcg::new(seed);
 
@@ -87,7 +89,11 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let t = Instant::now();
     let mut our_vals: Vec<Vec<Rational>> = Vec::with_capacity(corpus.len());
     for (e, pts) in &corpus {
-        let g = ctx.expand(e);
+        let g = if op_cancel {
+            ctx.cancel(e)
+        } else {
+            ctx.expand(e)
+        };
         let mut row = Vec::with_capacity(pts.len());
         for p in pts {
             let vals: Vec<(&str, Rational)> = VARS
@@ -122,7 +128,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 .map(|r| format!("{}/{}", r.num(), r.den()))
                 .collect::<Vec<_>>()
                 .join(" ");
-            req.push_str("E\t");
+            req.push_str(tag);
+            req.push('\t');
             req.push_str(&i.to_string());
             req.push('\t');
             req.push_str(text);
@@ -192,7 +199,10 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     }
 
     println!("\n── sympy expand 语义对拍 ──");
-    println!("语料      : {cases} 条 × {PTS_PER_CASE} 点（seed {seed}）");
+    println!(
+        "语料      : {cases} 条 × {PTS_PER_CASE} 点（seed {seed}，op = {}）",
+        if op_cancel { "cancel" } else { "expand" }
+    );
     println!("一致      : {agree}；不一致: {mismatch}；跳过: {skip}");
     println!(
         "耗时      : 我方 expand+精确求值 {d_ours:?}（{:.0} 条/s）；sympy {d_sympy:?}（{:.0} 条/s）",
