@@ -46,6 +46,62 @@ fn gen_expr(ctx: &Context, rng: &mut Lcg, depth: u32) -> Expr {
     }
 }
 
+/// 初等函数表达式（P1 语料）：sin/cos/tan/exp/log/sqrt 的嵌套组合；
+/// log/sqrt 的参数用 1+inner² 保持正域。
+/// taylor 模式限"展开点闭式域"：函数参数取 x 或 x²（0 点值为 0），
+/// log/sqrt 参数取 1+x 或 1+x²（0 点值为 1）——taylor 实现基于
+/// 各阶导数的精确求值，非闭式点（如 cos(4+x²) 在 0 点）返回 0。
+fn gen_elem_expr(ctx: &Context, rng: &mut Lcg, taylor_domain: bool) -> Expr {
+    let x = ctx.sym("x");
+    let heads = ["sin", "cos", "tan", "exp", "log", "sqrt"];
+    let mut acc = ctx.int(0);
+    let nt = 1 + rng.below(3);
+    for _ in 0..nt {
+        let r = rng.next_u64();
+        let head = heads[(r % heads.len() as u64) as usize];
+        let (inner, arg): (Expr, Expr) = if taylor_domain {
+            match head {
+                "log" | "sqrt" => {
+                    let a = if r % 2 == 0 {
+                        x.clone()
+                    } else {
+                        x.clone().pow(2)
+                    };
+                    let arg = ctx.int(1) + a;
+                    (x.clone(), arg)
+                }
+                _ => {
+                    let inner = if r % 2 == 0 {
+                        x.clone()
+                    } else {
+                        x.clone().pow(2)
+                    };
+                    (inner.clone(), inner)
+                }
+            }
+        } else {
+            let inner: Expr = match r % 3 {
+                0 => x.clone(),
+                1 => x.clone().pow(2) + ctx.int((r % 5) as i64),
+                _ => x.clone() + ctx.int(1 + (r % 3) as i64),
+            };
+            let arg: Expr = match head {
+                "log" | "sqrt" => ctx.int(1) + inner.clone().pow(2),
+                _ => inner.clone(),
+            };
+            (inner, arg)
+        };
+        let _ = &inner;
+        let f = ctx.call(head, std::slice::from_ref(&arg));
+        let coef = ctx.int(1 + (r % 4) as i64);
+        acc = acc + coef * f;
+    }
+    if rng.below(2) == 1 {
+        acc = acc * x.clone();
+    }
+    acc
+}
+
 /// 双变元随机积（M5）：2–3 个因子，每因子 1–3 项、单项指数 ≤ 2
 /// （指数更高会触发底层 PRS 的系数膨胀，见 DESIGN §18），× 有理内容。
 fn gen_univar_product(ctx: &Context, rng: &mut Lcg) -> Expr {
@@ -83,10 +139,20 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let op = crate::arg(args, "--op", "expand");
     let op_cancel = op == "cancel";
     let op_factor = op == "factor";
+    let op_diff = op == "diff";
+    let op_taylor = op == "taylor";
+    let op_simplify = op == "simplify";
+    let op_elem = op_diff || op_taylor || op_simplify;
     let tag = if op_cancel {
         "C"
     } else if op_factor {
         "F"
+    } else if op_diff {
+        "D"
+    } else if op_taylor {
+        "T"
+    } else if op_simplify {
+        "S"
     } else {
         "E"
     };
@@ -107,6 +173,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 cand = gen_univar_product(&ctx, &mut rng);
             }
             cand
+        } else if op_elem {
+            gen_elem_expr(&ctx, &mut rng, op_taylor)
         } else {
             gen_expr(&ctx, &mut rng, 4)
         };
@@ -116,7 +184,20 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 let p: Vec<Rational> = VARS.iter().map(|_| rand_rat(&mut rng)).collect();
                 let vals: Vec<(&str, Rational)> =
                     VARS.iter().zip(&p).map(|(n, v)| (*n, v.clone())).collect();
-                if ctx.eval_rational(&e, &vals).is_some() {
+                let ok_pt = if op_elem {
+                    ctx.eval_float(
+                        &e,
+                        &VARS
+                            .iter()
+                            .zip(p.iter())
+                            .map(|(n, v)| (*n, v.to_f64()))
+                            .collect::<Vec<_>>(),
+                    )
+                    .is_some_and(|v| v.is_finite())
+                } else {
+                    ctx.eval_rational(&e, &vals).is_some()
+                };
+                if ok_pt {
                     pts.push([p[0].clone(), p[1].clone(), p[2].clone(), p[3].clone()]);
                     continue 'pts;
                 }
@@ -132,11 +213,20 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     // 我方：expand 后逐点精确求值
     let t = Instant::now();
     let mut our_vals: Vec<Vec<Rational>> = Vec::with_capacity(corpus.len());
-    for (e, pts) in &corpus {
+    let mut our_float: Vec<Option<f64>> = Vec::new();
+    for (i, (e, pts)) in corpus.iter().enumerate() {
         let g = if op_cancel {
             ctx.cancel(e)
         } else if op_factor {
             ctx.factor(e)
+        } else if op_diff {
+            let x = ctx.sym("x");
+            ctx.diff(e, &x)
+        } else if op_taylor {
+            let x = ctx.sym("x");
+            ctx.taylor(e, &x, 0, 5)
+        } else if op_simplify {
+            ctx.simplify(e)
         } else {
             ctx.expand(e)
         };
@@ -147,7 +237,18 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 .zip(p.iter())
                 .map(|(n, v)| (*n, v.clone()))
                 .collect();
-            row.push(ctx.eval_rational(&g, &vals).expect("点已预检可求值"));
+            if op_elem {
+                if our_float.len() < i + 1 {
+                    let fvals: Vec<(&str, f64)> = VARS
+                        .iter()
+                        .zip(p.iter())
+                        .map(|(n, v)| (*n, v.to_f64()))
+                        .collect();
+                    our_float.push(ctx.eval_float(&g, &fvals));
+                }
+            } else {
+                row.push(ctx.eval_rational(&g, &vals).expect("点已预检可求值"));
+            }
         }
         our_vals.push(row);
     }
@@ -198,6 +299,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let per_case: usize = if op_factor { 1 } else { PTS_PER_CASE };
     let expected = cases * per_case;
     let mut sympy_factor: Vec<String> = vec![String::new(); cases];
+    let mut sympy_floats: Vec<Vec<Option<f64>>> = vec![Vec::new(); cases];
     let mut sympy_vals: Vec<Vec<Option<Rational>>> = vec![Vec::new(); cases];
     let mut line_no = 0usize;
     for line in BufReader::new(stdout).lines() {
@@ -210,6 +312,19 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         if op_factor {
             if let Some(v) = sympy_factor.get_mut(case) {
                 *v = cols[2].to_string();
+            }
+            line_no += 1;
+            if line_no == expected {
+                break;
+            }
+            continue;
+        }
+        if op_elem {
+            let f = cols[2]
+                .strip_prefix("F:")
+                .and_then(|t| t.parse::<f64>().ok());
+            if let Some(v) = sympy_floats.get_mut(case) {
+                v.push(f);
             }
             line_no += 1;
             if line_no == expected {
@@ -275,6 +390,31 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                         mismatch += 1; // 错拆（硬失败）
                         if mismatch <= 3 {
                             eprintln!("错拆 case#{i}: ours={o} sympy={sy}\n  expr: {text}");
+                        }
+                    }
+                }
+                _ => skip += 1,
+            }
+        }
+    } else if op_elem {
+        for (i, of) in our_float.iter().enumerate() {
+            let sy = sympy_floats
+                .get(i)
+                .and_then(|v| v.first())
+                .copied()
+                .flatten();
+            match (of, sy) {
+                (Some(a), Some(b)) => {
+                    let rel = (a - b).abs() / (a.abs() + b.abs() + 1.0);
+                    if rel < 1e-9 {
+                        agree += 1;
+                    } else {
+                        mismatch += 1;
+                        if mismatch <= 3 {
+                            eprintln!(
+                                "浮点不一致 case#{i}: ours={a:e} sympy={b:e}\n  expr: {}",
+                                texts[i]
+                            );
                         }
                     }
                 }

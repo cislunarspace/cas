@@ -667,3 +667,23 @@ sympy ERR，非我方失败。
    gcd 扇出放大到小输入超时——正解为**子结果式 PRS**。
 2. 35/300 漏拆：部分平移点组合失败时保守返回整体（0 错拆的前提）。
 3. ≥3 变元完全分解（Wang EEZ 逐变元提升）未实现。
+
+## 19. P1 落地记录（2026-09-12）：diff / taylor / simplify + 对标清单
+
+交付：`cas-expr/calculus.rs`——`Context::diff`（和/积/链式/幂三档
+（整数/有理/一般指数，一般指数引入 log 节点）/初等函数表
+sin cos tan exp log sqrt，abs→sign）；`Context::taylor`（x=a 处
+多项式部分到指定阶：反复求导 + 系数精确提取，函数特殊点（0/1）取
+精确值）；`Context::simplify`（L2 定向规则表：常量折叠 +
+sin²+cos²→1 无条件恒等式，自底向上单遍，确定性）。
+oracle 增 D/T/S 三模式（浮点对拍，30 位精度，容差 1e-9 相对）。
+新增 `MATLAB-PARITY.md` 对标清单（MATLAB 操作 → cas API → 验证）。
+
+**验收**：diff 300 例 / taylor 300 例（闭式域语料）/ simplify 300 例
+对 sympy 全部 **100% 一致**；既有 expand/cancel/factor 对拍复跑无回归
+（全绿）；全量 74 测试、clippy 干净。我方 diff 9.3 万条/s 对 sympy
+298 条/s；taylor 6748 对 33 条/s；simplify 38.9 万对 22 条/s。
+
+**已知限制**（对标清单记录）：taylor 限于"展开点各阶导数可精确求值"
+的闭式域（cos(4+x²)@0 这类非闭式点返回 0，正解为级数算术）；
+simplify 为保守规则集（设计 D4 的确定性取舍）。
