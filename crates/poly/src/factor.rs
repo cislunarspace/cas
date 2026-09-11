@@ -508,9 +508,11 @@ fn zassenhaus(s: &IPoly) -> Vec<IPoly> {
     let pk = pk as u64;
     // 目标：f̄ = lc^{-1}·s mod p^k（monic）
     let lc_inv = inv_mod(lc.rem_euclid(pk as i64) as u64, pk);
+    // 注意 u128 中转：c 与 lc_inv 都可近 pk（≈2^60），u64 乘法静默溢出——
+    // 曾致"整体符号翻转后 Hensel 第一步不变量破坏"（定点复现 seed=2）
     let a: Vec<u64> = s
         .iter()
-        .map(|&c| (c.rem_euclid(pk as i128) as u64) * lc_inv % pk)
+        .map(|&c| ((c.rem_euclid(pk as i128) as u64 as u128 * lc_inv as u128) % pk as u128) as u64)
         .collect();
     let lifted = hensel_all(&a, &facs_p, p, k, pk);
     // 确定性子集组合
@@ -840,7 +842,7 @@ mod tests {
     #[test]
     fn 随机积重展开() {
         let mut det = Det::new();
-        for _ in 0..200 {
+        for _ in 0..600 {
             let nf = 2 + det.next() % 2; // 2–3 个因子
             let mut f = Poly::constant(ring(), Rational::one());
             for _ in 0..nf {
@@ -877,5 +879,34 @@ mod tests {
             Rational::from_ints(&Integer::from_i64(8), &Integer::from_i64(1)).unwrap()
         );
         check_refold(&f);
+    }
+}
+
+#[cfg(test)]
+mod hensel_regression {
+    use super::*;
+
+    /// u64 溢出回归：整体系数符号翻转后 Hensel 第一步不变量破坏
+    /// （lc⁻¹·c 在 u64 下静默回绕；修复为 u128 中转）。
+    #[test]
+    fn 溢出回归_符号翻转() {
+        let f1: IPoly = vec![-1, 2, 5, 2, -6];
+        let f2: IPoly = vec![6, -3, 1, 1, 6, 3, -4];
+        let f3: IPoly = vec![4, -6, 0, -1, -5];
+        let mut f = vec![0i128; 15];
+        for (i, &x) in f1.iter().enumerate() {
+            for (j, &y) in f2.iter().enumerate() {
+                for (k, &z) in f3.iter().enumerate() {
+                    f[i + j + k] += x * y * z;
+                }
+            }
+        }
+        ip_trim(&mut f);
+        assert_eq!(zassenhaus(&f).len(), 3, "原始版本");
+        let mut neg = f.clone();
+        for c in &mut neg {
+            *c = -*c;
+        }
+        assert_eq!(zassenhaus(&neg).len(), 3, "符号翻转版本（曾触发 u64 溢出）");
     }
 }

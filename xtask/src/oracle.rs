@@ -93,7 +93,15 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let mut texts: Vec<String> = Vec::with_capacity(cases);
     while corpus.len() < cases {
         let e = if op_factor {
-            gen_univar_product(&ctx, &mut rng)
+            let mut cand = gen_univar_product(&ctx, &mut rng);
+            while ctx.inspect(|i| matches!(i.kind(cand.raw_id()), cas_expr::Kind::Int(_)))
+                && ctx
+                    .eval_rational(&cand, &[("x", Rational::zero())])
+                    .is_some_and(|v| v.is_zero())
+            {
+                cand = gen_univar_product(&ctx, &mut rng);
+            }
+            cand
         } else {
             gen_expr(&ctx, &mut rng, 4)
         };
@@ -237,9 +245,11 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         for (i, ((e, _), text)) in corpus.iter().zip(&texts).enumerate() {
             let g = ctx.factor(e);
             let ours = multiset_of(&g);
-            match (ours, sympy_factor.get(i).map(String::as_str)) {
-                (Some(o), Some(sy)) if !sy.is_empty() => {
-                    if o == *sy {
+            let sy = sympy_factor.get(i).cloned().unwrap_or_default();
+            match (&ours, sy.as_str()) {
+                // 空多重集 = 双方都视为零多项式（无因子），同样是一致
+                (Some(o), sy) if !sy.is_empty() || o.is_empty() => {
+                    if o == sy {
                         agree += 1;
                     } else {
                         mismatch += 1;
