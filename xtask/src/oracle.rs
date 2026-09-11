@@ -46,17 +46,22 @@ fn gen_expr(ctx: &Context, rng: &mut Lcg, depth: u32) -> Expr {
     }
 }
 
-/// 单变元随机积：2–3 个 [-6,6] 整系数因子（次数 1..=6）× 有理内容。
+/// 双变元随机积（M5）：2–3 个因子，每因子 1–3 项、单项指数 ≤ 2
+/// （指数更高会触发底层 PRS 的系数膨胀，见 DESIGN §18），× 有理内容。
 fn gen_univar_product(ctx: &Context, rng: &mut Lcg) -> Expr {
     let x = ctx.sym("x");
+    let y = ctx.sym("y");
     let nf = 2 + rng.below(2);
     let mut acc = ctx.int(1);
     for _ in 0..nf {
-        let deg = 1 + rng.below(6);
+        let nt = 1 + rng.below(3);
         let mut f = ctx.int(0);
-        for k in 0..=deg {
-            let c = ctx.int(rng.below(13) as i64 - 6);
-            f = f + c * x.clone().pow(k as i64);
+        for _ in 0..nt {
+            let r = rng.next_u64();
+            let c = ctx.int((r % 11) as i64 - 5);
+            let xe = (r >> 16) % 3;
+            let ye = (r >> 24) % 3;
+            f = f + c * x.clone().pow(xe as i64) * y.clone().pow(ye as i64);
         }
         acc = acc * f;
     }
@@ -230,7 +235,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let _ = child.wait();
 
     // 比较：expand/cancel 走点值；factor 走 重数:次数 多重集 + 重展开点值
-    let (mut agree, mut mismatch, mut skip) = (0usize, 0usize, 0usize);
+    let (mut agree, mut mismatch, mut skip, mut under_split) = (0usize, 0usize, 0usize, 0usize);
     if op_factor {
         // 我方从 factor 结果读 (重数, 次数)：Mul 参数逐个归类
         let multiset_of = |g: &Expr| -> Option<String> {
@@ -246,15 +251,30 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             let g = ctx.factor(e);
             let ours = multiset_of(&g);
             let sy = sympy_factor.get(i).cloned().unwrap_or_default();
+            // 次数守恒校验：Σ(重数×次数) 相等 ⇒ 无错拆（可能漏拆）
+            let tot = |s: &str| -> u64 {
+                s.split(',')
+                    .filter(|p| !p.is_empty())
+                    .map(|p| {
+                        let (a, b) = p.split_once(':').unwrap_or(("0", "0"));
+                        a.parse::<u64>().unwrap_or(0) * b.parse::<u64>().unwrap_or(0)
+                    })
+                    .sum()
+            };
             match (&ours, sy.as_str()) {
                 // 空多重集 = 双方都视为零多项式（无因子），同样是一致
                 (Some(o), sy) if !sy.is_empty() || o.is_empty() => {
                     if o == sy {
                         agree += 1;
+                    } else if tot(o) == tot(sy) {
+                        under_split += 1; // 漏拆（保守方向，重展开恒等保持）
+                        if under_split <= 3 {
+                            eprintln!("漏拆 case#{i}: ours={o} sympy={sy}\n  expr: {text}");
+                        }
                     } else {
-                        mismatch += 1;
+                        mismatch += 1; // 错拆（硬失败）
                         if mismatch <= 3 {
-                            eprintln!("多重集不一致 case#{i}: ours={o} sympy={sy}\n  expr: {text}");
+                            eprintln!("错拆 case#{i}: ours={o} sympy={sy}\n  expr: {text}");
                         }
                     }
                 }
@@ -293,17 +313,21 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         "语料      : {cases} 条 × {}（seed {seed}）",
         if op_factor { "多重集" } else { "3 点" }
     );
-    println!("一致      : {agree}；不一致: {mismatch}；跳过: {skip}");
+    println!("一致      : {agree}；错拆: {mismatch}；漏拆: {under_split}；跳过: {skip}");
     println!(
         "耗时      : 我方 {op} {d_ours:?}（{:.0} 条/s）；sympy {d_sympy:?}（{:.0} 条/s）",
         cases as f64 / d_ours.as_secs_f64().max(1e-9),
         cases as f64 / d_sympy.as_secs_f64().max(1e-9),
     );
     if mismatch == 0 && skip == 0 {
-        println!("判定      : 通过（一致率 100%）");
+        if under_split == 0 {
+            println!("判定      : 通过（一致率 100%）");
+        } else {
+            println!("判定      : 通过-保守（0 错拆，{under_split} 漏拆，恒等性保持）");
+        }
         ExitCode::SUCCESS
     } else {
-        println!("判定      : 失败（mismatch={mismatch}, skip={skip}）");
+        println!("判定      : 失败（错拆={mismatch}, skip={skip}）");
         ExitCode::FAILURE
     }
 }

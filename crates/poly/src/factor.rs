@@ -17,12 +17,12 @@ const PRIMES: &[u64] = &[
 ];
 
 /// CZ 随机源（固定种子）。
-struct Det(u64);
+pub(crate) struct Det(u64);
 impl Det {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Det(0xC0FF_EE01)
     }
-    fn next(&mut self) -> u64 {
+    pub(crate) fn next(&mut self) -> u64 {
         let mut x = self.0 | 1;
         x ^= x << 13;
         x ^= x >> 7;
@@ -630,7 +630,7 @@ fn ip_trim_mut(mut v: IPoly) -> IPoly {
 
 // ── Yun 平方自由分解（复用 Poly<Rational> 的 gcd/exact_div/deriv）──
 
-fn squarefree_parts(f: &Poly<Rational>) -> Vec<(Poly<Rational>, u32)> {
+pub(crate) fn squarefree_parts(f: &Poly<Rational>) -> Vec<(Poly<Rational>, u32)> {
     let df = f.deriv(0);
     if df.is_zero() {
         return vec![(f.clone(), 1)];

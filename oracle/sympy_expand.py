@@ -26,9 +26,9 @@ def main() -> None:
             expr = parse_expr(text.replace("^", "**"))
             if tag == "F":
                 # 因式分解对拍：返回 重数:次数 多重集（排序后序列化）；不需点
-                from sympy import factor_list, degree as sym_degree
+                from sympy import factor_list, total_degree
                 _, facs = factor_list(expr)
-                ms = sorted(f"{m}:{sym_degree(f)}" for f, m in facs)
+                ms = sorted(f"{m}:{total_degree(f)}" for f, m in facs)
                 print(f"V\t{i}\t{','.join(ms)}", flush=True)
                 continue
             env = {}

@@ -217,14 +217,14 @@ fn embed_tail(p: &Poly<Rational>, ring: &Arc<PolyRing>) -> Poly<Rational> {
 
 /// 主变元视角的稀疏一元表示：系数为剩余变元上的 Poly（ring0）。
 #[derive(Clone)]
-struct Uni {
+pub(crate) struct Uni {
     /// 按主变元次数降序；系数非零。
     terms: Vec<(u32, Poly<Rational>)>,
     ring0: Arc<PolyRing>,
 }
 
 impl Uni {
-    fn from_poly(p: &Poly<Rational>, ring0: &Arc<PolyRing>) -> Self {
+    pub(crate) fn from_poly(p: &Poly<Rational>, ring0: &Arc<PolyRing>) -> Self {
         let mut by_deg: HashMap<u32, Vec<(Vec<u32>, Rational)>> = HashMap::new();
         for (e, c) in p.terms() {
             by_deg
@@ -257,7 +257,7 @@ impl Uni {
     }
 
     /// 系数（剩余变元多项式）的公因子——递归 gcd。
-    fn content(&self) -> Poly<Rational> {
+    pub(crate) fn content(&self) -> Poly<Rational> {
         let mut acc = Poly::zero(self.ring0.clone());
         for (_, c) in &self.terms {
             acc = acc.gcd_raw(c);
@@ -266,7 +266,7 @@ impl Uni {
     }
 
     /// 各系数被内容整除（构造保证整除）。
-    fn exact_div_content(&self, c: &Poly<Rational>) -> Self {
+    pub(crate) fn exact_div_content(&self, c: &Poly<Rational>) -> Self {
         let terms: Vec<(u32, Poly<Rational>)> = self
             .terms
             .iter()
@@ -303,6 +303,9 @@ impl Uni {
             let mut terms: Vec<(u32, Poly<Rational>)> =
                 acc.into_iter().filter(|(_, p)| !p.is_zero()).collect();
             terms.sort_by_key(|(d, _)| std::cmp::Reverse(*d));
+            // 注：朴素伪除 lc(b)^k 的系数膨胀在 2 变元高次（deg ≳ 6）时
+            // 不可算。内层本原化可治但把递归 gcd 扇出放大到小输入超时，
+            // 正解为子结果式 PRS（挂 M5b，见 DESIGN §18）。
             r = Uni {
                 terms,
                 ring0: self.ring0.clone(),
@@ -312,7 +315,7 @@ impl Uni {
     }
 
     /// 回嵌全环：指数向量 = [主变元次数, 剩余指数…]。
-    fn to_poly(&self, ring: Arc<PolyRing>) -> Poly<Rational> {
+    pub(crate) fn to_poly(&self, ring: Arc<PolyRing>) -> Poly<Rational> {
         let mut items: Vec<(Vec<u32>, Rational)> = Vec::new();
         for (d, coef) in &self.terms {
             for (e, c) in coef.terms() {
