@@ -20,7 +20,7 @@ oracle（语义对拍 = 随机点交叉精确/浮点求值）；MATLAB 本体因
 | `subs` | `ctx.subst` | ✅ | M2 单测（恒等代换回原节点） |
 | 数值求值 `subs`/`vpa` | `ctx.eval_rational` / `ctx.eval_float` | ✅ | M1/M2 单测 + 全部 oracle 的求值通道 |
 | 表达式化简 `collect` | （未单独提供） | ➖ | collect 语义可由 expand+规范形覆盖 |
-| `assume` | （D5 已设计未实现） | ➖ | P1 后期：闭谓词集 |
+| `assume` | `ctx.sym_with` + `ctx.query` | ✅ | D5 闭谓词集（9 个）+ 闭包/冲突 + 三值查询；假设驱动化简（sqrt(x²)→x 等）oracle 300 例 100% |
 | `solve` | 非目标 | — | 设计文档明确排除（P2 起按需评估） |
 | `int` 积分 | 非目标 | — | 同上 |
 | 符号矩阵 `det`/`rank` | 非目标（P2） | — | — |
@@ -32,16 +32,19 @@ oracle（语义对拍 = 随机点交叉精确/浮点求值）；MATLAB 本体因
 2. **simplify 保守**：常量折叠 + 无条件恒等式的定向规则集，不做
    假设推理与启发式搜索（确定性优先，设计 D4 的明示取舍）。
 3. **双变元 factor 的 35/300 漏拆**与 PRS 高次膨胀（M5b，子结果式）。
-4. **假设系统未实现**：`assume`/`assumeAlso` 对应能力待 P1 后期。
+4. **assume 语义差异（有意）**：同一 Context 内同名符号假设一次性设定
+   （重设报错），不采用 MATLAB assume 的覆盖语义；谓词集固定 9 个，
+   无 `assumeAlso`/清除。
+
 
 ## 验证方式汇总
 
-oracle（sympy 1.14，版本锁定）六种对拍模式：expand 5000 例 / cancel
+oracle（sympy 1.14，版本锁定）七种对拍模式：expand 5000 例 / cancel
 1000 例 / factor 单变元 1000 + 双变元 300 例 / diff 300 例 / taylor
-300 例 / simplify 300 例——除 factor 双变元为"通过-保守（0 错拆）"外
-全部 100% 语义一致。语料种子固定、判据分档（错拆硬失败、漏拆记录、
+300 例 / simplify 300 例 / assume（假设驱动化简）300 例——除 factor
+双变元为"通过-保守（0 错拆）"外全部 100% 语义一致。语料种子固定、判据分档（错拆硬失败、漏拆记录、
 次数守恒校验）。运行方式：
 
 ```bash
-cd cas && cargo run --release -p xtask -- oracle --op <expand|cancel|factor|diff|taylor|simplify> [--cases N]
+cd cas && cargo run --release -p xtask -- oracle --op <expand|cancel|factor|diff|taylor|simplify|assume> [--cases N]
 ```

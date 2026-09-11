@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+mod assume;
 mod calculus;
 mod canonical;
 mod eval;
@@ -35,6 +36,7 @@ mod transform;
 use hash::FxBuild;
 pub(crate) use node::Node;
 
+pub use crate::assume::{Assumptions, Predicate, Trinary};
 pub use cas_domain::{Integer, Rational};
 
 /// arena 与全部查表的宿主。类型名公开是为 `IntoExpr` 等签名可提及；
@@ -48,6 +50,7 @@ pub struct Inner {
     pub(crate) sym_names: Vec<Box<str>>,
     pub(crate) fn_heads: HashMap<Box<str>, u32, FxBuild>,
     pub(crate) fn_names: Vec<Box<str>>,
+    pub(crate) sym_assumptions: HashMap<u32, assume::Assumptions>,
 }
 
 impl Inner {
@@ -61,6 +64,7 @@ impl Inner {
             sym_names: Vec::new(),
             fn_heads: HashMap::with_hasher(FxBuild::default()),
             fn_names: Vec::new(),
+            sym_assumptions: HashMap::new(),
         }
     }
 }
@@ -189,6 +193,38 @@ impl Context {
     /// 1/2 变元完全分解，≥3 变元部分（内容+平方自由）；非多项式输入返回原节点。
     pub fn factor(&self, e: &Expr) -> Expr {
         self.with(|c| c.factor_at(e.id))
+    }
+
+    /// 带假设声明符号（D5）：闭包补全（even⇒integer⇒…）+ 冲突检测；
+    /// 同名重设不同假设报错（返回 Err 由调用方决定——MATLAB assume
+    /// 的覆盖语义是有意不采用的，见 DESIGN D5）。
+    pub fn sym_with(&self, name: &str, preds: &[assume::Predicate]) -> Result<Expr, String> {
+        validate_name(name, "符号");
+        let a = assume::Assumptions::union(preds);
+        let e = self.sym(name);
+        let sid = self.inner.borrow().syms.get(name).copied();
+        if let Some(sid) = sid {
+            self.inner
+                .borrow_mut()
+                .sym_assumptions
+                .entry(sid)
+                .and_modify(|old| {
+                    assert!(
+                        *old == a,
+                        "符号 {name} 的假设只能一次性设定（当前 {:?}，重设 {:?}）",
+                        old,
+                        a
+                    );
+                })
+                .or_insert(a);
+        }
+        Ok(e)
+    }
+
+    /// 三值假设查询（D5）：True / False / Unknown。
+    pub fn query(&self, e: &Expr, p: assume::Predicate) -> assume::Trinary {
+        let inner = self.inner.borrow();
+        inner.query_at(e.id, p, 0)
     }
 
     /// 符号求导（P1）：和/积/链式/幂（整数、有理、一般指数）与初等

@@ -46,6 +46,33 @@ fn gen_expr(ctx: &Context, rng: &mut Lcg, depth: u32) -> Expr {
     }
 }
 
+/// 假设语料（D5 对拍）：x 以 positive 绑定，表达式含 sqrt(x²)、
+/// log(x)、log(x+c) 等——假设驱动化简的用武之地；其余项为多项式噪声。
+fn gen_assume_expr(ctx: &Context, rng: &mut Lcg) -> Expr {
+    use cas_expr::Predicate;
+    let x = ctx
+        .sym_with("x", &[Predicate::Positive])
+        .expect("一次性绑定");
+    let mut acc = ctx.int(0);
+    let nt = 1 + rng.below(3);
+    for k in 0..nt {
+        let r = rng.next_u64();
+        let term: Expr = match r % 4 {
+            0 => ctx.call("sqrt", &[x.clone().pow(2)]),
+            1 => ctx.call("log", std::slice::from_ref(&x)),
+            2 => {
+                let c = ctx.int(1 + (r % 3) as i64);
+                ctx.call("log", &[x.clone() + c])
+            }
+            _ => x.clone().pow(2) + ctx.int((r % 5) as i64),
+        };
+        let coef = ctx.int(1 + (r % 4) as i64);
+        let _ = k;
+        acc = acc + coef * term;
+    }
+    acc
+}
+
 /// 初等函数表达式（P1 语料）：sin/cos/tan/exp/log/sqrt 的嵌套组合；
 /// log/sqrt 的参数用 1+inner² 保持正域。
 /// taylor 模式限"展开点闭式域"：函数参数取 x 或 x²（0 点值为 0），
@@ -143,6 +170,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let op_taylor = op == "taylor";
     let op_simplify = op == "simplify";
     let op_elem = op_diff || op_taylor || op_simplify;
+    let op_assume = op == "assume";
+    let op_elem = op_elem || op_assume;
     let tag = if op_cancel {
         "C"
     } else if op_factor {
@@ -153,6 +182,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         "T"
     } else if op_simplify {
         "S"
+    } else if op_assume {
+        "A"
     } else {
         "E"
     };
@@ -173,6 +204,8 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
                 cand = gen_univar_product(&ctx, &mut rng);
             }
             cand
+        } else if op_assume {
+            gen_assume_expr(&ctx, &mut rng)
         } else if op_elem {
             gen_elem_expr(&ctx, &mut rng, op_taylor)
         } else {
@@ -181,10 +214,24 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
         let mut pts = Vec::new();
         'pts: for _ in 0..PTS_PER_CASE {
             for _ in 0..8 {
-                let p: Vec<Rational> = VARS.iter().map(|_| rand_rat(&mut rng)).collect();
+                let mut p: Vec<Rational> = VARS.iter().map(|_| rand_rat(&mut rng)).collect();
+                if op_assume {
+                    // 假设语料：x 取正点（abs），与 sympy 端一致
+                    p[0] = p[0].abs();
+                }
                 let vals: Vec<(&str, Rational)> =
                     VARS.iter().zip(&p).map(|(n, v)| (*n, v.clone())).collect();
-                let ok_pt = if op_elem {
+                let ok_pt = if op_assume {
+                    ctx.eval_float(
+                        &e,
+                        &VARS
+                            .iter()
+                            .zip(p.iter())
+                            .map(|(n, v)| (*n, v.to_f64()))
+                            .collect::<Vec<_>>(),
+                    )
+                    .is_some_and(|v| v.is_finite())
+                } else if op_elem {
                     ctx.eval_float(
                         &e,
                         &VARS
@@ -226,6 +273,9 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             let x = ctx.sym("x");
             ctx.taylor(e, &x, 0, 5)
         } else if op_simplify {
+            ctx.simplify(e)
+        } else if op_assume {
+            // x 已在语料生成时以 positive 绑定
             ctx.simplify(e)
         } else {
             ctx.expand(e)

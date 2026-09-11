@@ -314,7 +314,8 @@ impl Inner {
                     .map(|&a| self.simplify_at(a, depth + 1))
                     .collect();
                 let s = self.make_add(&v);
-                self.try_rules_add(s)
+                let s = self.try_rules_add(s);
+                self.try_rules_log_add(s)
             }
             Info::Mul(args) => {
                 let v: Vec<u32> = args
@@ -334,9 +335,79 @@ impl Inner {
                     .map(|&a| self.simplify_at(a, depth + 1))
                     .collect();
                 let f = self.fn_node_by_id(head, &v);
-                self.try_rules_fn(f, head, &v)
+                let f = self.try_rules_fn(f, head, &v);
+                self.try_rules_sqrt_sq(f)
             }
         }
+    }
+
+    /// Add 级假设驱动规则：log(a) + log(b) → log(a·b)（a>0 ∧ b>0）。
+    fn try_rules_log_add(&mut self, id: u32) -> u32 {
+        use crate::assume::{Predicate, Trinary};
+        let args = match &self.nodes[id as usize] {
+            Node::Add { args: sp } => self.node_args(*sp).to_vec(),
+            _ => return id,
+        };
+        if args.len() < 2 {
+            return id;
+        }
+        let mut logs: Vec<u32> = vec![];
+        let mut rest: Vec<u32> = vec![];
+        for &a in &args {
+            let log_arg = match &self.nodes[a as usize] {
+                Node::Fn { head, args: sp } => {
+                    let name = self.fn_names[*head as usize].as_ref();
+                    if name == "log" && self.node_args(*sp).len() == 1 {
+                        Some(self.node_args(*sp)[0])
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            match log_arg {
+                Some(arg) if self.query_at(arg, Predicate::Positive, 0) == Trinary::True => {
+                    logs.push(a);
+                }
+                _ => rest.push(a),
+            }
+        }
+        if logs.len() < 2 {
+            return id;
+        }
+        let mut combined: u32 = match &self.nodes[logs[0] as usize] {
+            Node::Fn { args: sp, .. } => self.node_args(*sp)[0],
+            _ => unreachable!(),
+        };
+        for &l in &logs[1..] {
+            let arg = match &self.nodes[l as usize] {
+                Node::Fn { args: sp, .. } => self.node_args(*sp)[0],
+                _ => unreachable!(),
+            };
+            combined = self.make_mul(&[combined, arg]);
+        }
+        let merged = self.fn_node("log", &[combined]);
+        rest.push(merged);
+        self.make_add(&rest)
+    }
+
+    /// sqrt(x²) → x（x nonnegative；MATLAB assume positive 的标准行为）。
+    fn try_rules_sqrt_sq(&mut self, id: u32) -> u32 {
+        use crate::assume::{Predicate, Trinary};
+        if let Node::Fn { head, args: sp } = &self.nodes[id as usize] {
+            if self.fn_names[*head as usize].as_ref() == "sqrt" {
+                let args = self.node_args(*sp);
+                if args.len() == 1 {
+                    if let Node::Pow { base, exp } = &self.nodes[args[0] as usize] {
+                        let e2 = matches!(&self.nodes[*exp as usize], Node::Int(k) if k.to_i64() == Some(2));
+                        if e2 && self.query_at(*base, Predicate::Positive, 0) == Trinary::True {
+                            return *base;
+                        }
+                    }
+                }
+            }
+        }
+        id
     }
 
     /// Add 级规则：sin²+cos² → 1（匹配两个项，其余项保留）。

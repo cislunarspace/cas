@@ -687,3 +687,20 @@ oracle 增 D/T/S 三模式（浮点对拍，30 位精度，容差 1e-9 相对）
 **已知限制**（对标清单记录）：taylor 限于"展开点各阶导数可精确求值"
 的闭式域（cos(4+x²)@0 这类非闭式点返回 0，正解为级数算术）；
 simplify 为保守规则集（设计 D4 的确定性取舍）。
+
+## 20. 假设系统落地（2026-09-12，D5 实现）
+
+交付：`cas-expr/assume.rs`——`Predicate`（9 个闭谓词）+ `Assumptions`
+位集（闭包补全 even⇒integer⇒rational⇒real、positive⇒real∧nonzero∧
+finite；冲突 positive∧negative / even∧odd 检测）+ BOUND 位区分
+"未绑定（查询恒 Unknown）"与"绑定"；`Context::sym_with`（一次性设定，
+重设不同值 panic——不采用 MATLAB assume 的覆盖语义）与 `Context::query`
+（三值：字面量精确判定 + 头函数事实表 exp>0、sqrt/log 实性、
+Mul 符号乘积、x^k 传播）。化简耦合（仅 True 触发）：sqrt(x²)→x
+（x positive）、log(a)+log(b)→log(a·b)（a,b positive）。
+
+**验收**：单测 4 项（闭包冲突、一次性绑定、三值查询、假设驱动化简）
+全绿；oracle `--op assume`（x positive 语料，sqrt/log 类）300 例对
+sympy **100% 一致**；diff/taylor/simplify 对拍复跑无回归；全量 74
+测试、clippy 干净。MATLAB-PARITY.md 的 assume ➖ 项已闭合（清单 11 ✅
+/ 1 ➖ collect，其语义由 expand+规范形覆盖）。

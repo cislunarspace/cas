@@ -18,12 +18,26 @@ VARS = symbols("x y z w")
 def main() -> None:
     for line in sys.stdin:
         parts = line.rstrip("\n").split("\t")
-        if len(parts) != 4 or parts[0] not in ("E", "C", "F", "D", "T", "S"):
+        if len(parts) != 4 or parts[0] not in ("E", "C", "F", "D", "T", "S", "A"):
             continue
         tag, i, text, pt = parts[0], parts[1], parts[2], parts[3]
         try:
             # parse_expr 默认不含 convert_xor（^ 会被当作异或），显式替换
             expr = parse_expr(text.replace("^", "**"))
+            if tag == "A":
+                # 假设对拍：x 声明 positive，simplify 后点值（正点）
+                from sympy import Symbol, simplify as sym_simplify
+                xp = Symbol("x", positive=True)
+                xnum, xden = pt.split()[0].split("/")
+                env = {xp: Rational(int(xnum), int(xden))}
+                expr_a = expr.subs(VARS[0], xp)
+                val = sym_simplify(expr_a).subs(env)
+                fv = val.evalf(30)
+                if not fv.is_number or not fv.is_finite:
+                    print(f"V\t{i}\tERR", flush=True)
+                    continue
+                print(f"V\t{i}\tF:{fv}", flush=True)
+                continue
             if tag in ("D", "T", "S"):
                 env = {}
                 for s_, p_ in zip(VARS, pt.split()):
