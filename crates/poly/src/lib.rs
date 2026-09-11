@@ -12,6 +12,8 @@
 
 use cas_domain::{Rational, Ring};
 use std::cmp::Ordering;
+
+mod gcd;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -26,7 +28,7 @@ pub enum MonOrder {
     DegRevLex,
 }
 
-fn cmp_monomials(order: MonOrder, a: &[u32], b: &[u32]) -> Ordering {
+pub(crate) fn cmp_monomials(order: MonOrder, a: &[u32], b: &[u32]) -> Ordering {
     debug_assert_eq!(a.len(), b.len());
     match order {
         MonOrder::Lex => {
