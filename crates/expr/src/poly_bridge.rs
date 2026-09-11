@@ -41,10 +41,12 @@ pub(crate) fn collect_syms(inner: &Inner, id: u32, out: &mut Vec<u32>, depth: u3
 
 /// 由符号 id 集合构造公共环：变元序 = 名字节序升序（D6；跨构造路径确定性）。
 /// 返回（ring，变元 sym-id 表按环序，sym-id → 变元下标）。
-pub(crate) fn ring_for(
-    inner: &Inner,
-    syms: &[u32],
-) -> (Arc<PolyRing>, Vec<u32>, HashMap<u32, usize>) {
+type RingView = (Arc<PolyRing>, Vec<u32>, HashMap<u32, usize>);
+
+pub(crate) fn ring_for(inner: &Inner, syms: &[u32]) -> Option<RingView> {
+    if syms.is_empty() {
+        return None; // 纯常数：无变元，不构成多项式环
+    }
     let mut named: Vec<(u32, String)> = syms
         .iter()
         .map(|&s| (s, inner.sym_names[s as usize].to_string()))
@@ -57,14 +59,14 @@ pub(crate) fn ring_for(
         .enumerate()
         .map(|(i, &(s, _))| (s, i))
         .collect();
-    (ring, var_ids, vi)
+    Some((ring, var_ids, vi))
 }
 
 /// 提取为多项式。返回（ring，变元 sym-id 表，多项式）。
 pub(crate) fn to_poly(inner: &Inner, id: u32) -> Option<(Arc<PolyRing>, Vec<u32>, Poly<Rational>)> {
     let mut syms: Vec<u32> = Vec::new();
     collect_syms(inner, id, &mut syms, 0);
-    let (ring, var_ids, vi) = ring_for(inner, &syms);
+    let (ring, var_ids, vi) = ring_for(inner, &syms)?;
     let p = to_poly_with(inner, id, &ring, &vi)?;
     Some((ring, var_ids, p))
 }

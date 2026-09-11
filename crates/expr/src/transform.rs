@@ -196,7 +196,9 @@ impl Inner {
         let mut syms: Vec<u32> = Vec::new();
         crate::poly_bridge::collect_syms(self, n_id, &mut syms, 0);
         crate::poly_bridge::collect_syms(self, d_id, &mut syms, 0);
-        let (ring, var_ids, vi) = crate::poly_bridge::ring_for(self, &syms);
+        let Some((ring, var_ids, vi)) = crate::poly_bridge::ring_for(self, &syms) else {
+            return id;
+        };
         let np = match crate::poly_bridge::to_poly_with(self, n_id, &ring, &vi) {
             Some(p) => p,
             None => return id,

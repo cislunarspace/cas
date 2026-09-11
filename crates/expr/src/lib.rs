@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 mod canonical;
 mod eval;
+mod factor;
 mod hash;
 mod node;
 mod order;
@@ -181,6 +182,12 @@ impl Context {
     /// 非多项式因子原样保留；无可约化时返回与输入同一节点。
     pub fn cancel(&self, e: &Expr) -> Expr {
         self.with(|c| c.cancel_at(e.id))
+    }
+
+    /// 一元多项式因式分解（M4）：`cont · Π 因子^重数`，重建为规范形。
+    /// 非一元/非多项式输入返回原节点（多变元属 M5）。
+    pub fn factor(&self, e: &Expr) -> Expr {
+        self.with(|c| c.factor_at(e.id))
     }
 
     /// 代换：按符号名替换子表达式（替换值须属同一 Context）。
@@ -796,6 +803,43 @@ mod tests {
         let e = ctx.call("sin", std::slice::from_ref(&x)) * (y.clone() + z.clone()).pow(5)
             + ctx.float(1.5) * (x.clone() + w.clone()).pow(3);
         assert_eq!(ctx.expand(&e).raw_id(), slow_of(&ctx, &e));
+    }
+
+    #[test]
+    fn 因式分解() {
+        let ctx = Context::new();
+        let x = ctx.sym("x");
+
+        // x^2 − 1 → (x − 1)(x + 1)（节点恒等）
+        let e = x.clone().pow(2) - ctx.int(1);
+        let g = ctx.factor(&e);
+        let expect = (x.clone() - ctx.int(1)) * (x.clone() + ctx.int(1));
+        assert_eq!(g.raw_id(), expect.raw_id());
+
+        // (x^2 − 1)^2 → (x − 1)^2 (x + 1)^2
+        let e = x.clone().pow(2) - ctx.int(1);
+        let e = e.pow(2);
+        let g = ctx.factor(&e);
+        let expect = (x.clone() - ctx.int(1)).pow(2) * (x.clone() + ctx.int(1)).pow(2);
+        assert_eq!(g.raw_id(), expect.raw_id());
+
+        // x^4 + 4 在 ℚ 上可约（Sophie Germain）
+        let e = x.clone().pow(4) + ctx.int(4);
+        let g = ctx.factor(&e);
+        let expect = (x.clone().pow(2) - ctx.int(2) * x.clone() + ctx.int(2))
+            * (x.clone().pow(2) + ctx.int(2) * x.clone() + ctx.int(2));
+        assert_eq!(g.raw_id(), expect.raw_id());
+
+        // x^4 + 1 不可约：重建后应与原式同节点
+        let e = x.clone().pow(4) + ctx.int(1);
+        let g = ctx.factor(&e);
+        let expect = x.clone().pow(4) + ctx.int(1);
+        assert_eq!(g.raw_id(), expect.raw_id());
+
+        // 多符号输入：原样返回（同节点）
+        let y = ctx.sym("y");
+        let e = x.clone() * y.clone();
+        assert_eq!(ctx.factor(&e).raw_id(), e.raw_id());
     }
 
     #[test]

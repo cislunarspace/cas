@@ -13,6 +13,7 @@
 use cas_domain::{Rational, Ring};
 use std::cmp::Ordering;
 
+mod factor;
 mod gcd;
 use std::collections::HashMap;
 use std::fmt;
