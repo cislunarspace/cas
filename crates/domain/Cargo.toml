@@ -1,0 +1,11 @@
+[package]
+name = "cas-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "cas 数值层：任意精度整数与有理数（i64 内联 + 大数后备的混合表示）"
+
+[dependencies]
+num-bigint = { workspace = true }
+num-integer = { workspace = true }
