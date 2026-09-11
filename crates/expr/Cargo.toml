@@ -1,0 +1,19 @@
+[package]
+name = "cas-expr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "cas 表达式层：arena + hash-consing、规范形构造、确定性全序"
+
+[dependencies]
+cas-domain = { workspace = true }
+proptest = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+# 自引用：为集成测试启用 test-gen 特性（语料生成器不进默认依赖图）
+cas-expr = { path = ".", features = ["test-gen"] }
+
+[features]
+test-gen = ["dep:proptest"]

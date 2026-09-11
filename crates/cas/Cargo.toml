@@ -1,0 +1,17 @@
+[package]
+name = "cas"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "cas：Rust 通用符号代数引擎（编排 facade）"
+
+[dependencies]
+cas-domain = { workspace = true }
+cas-expr = { workspace = true }
+cas-print = { workspace = true }
+cas-parse = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+cas-expr = { path = "../../crates/expr", features = ["test-gen"] }

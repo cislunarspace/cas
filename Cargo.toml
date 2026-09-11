@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["crates/domain"]
+members = [
+    "crates/domain",
+    "crates/expr",
+    "crates/print",
+    "crates/parse",
+    "crates/cas",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,3 +19,7 @@ num-bigint = "0.4"
 num-integer = "0.1"
 proptest = "1"
 cas-domain = { path = "crates/domain" }
+cas-expr = { path = "crates/expr" }
+cas-print = { path = "crates/print" }
+cas-parse = { path = "crates/parse" }
+cas = { path = "crates/cas" }

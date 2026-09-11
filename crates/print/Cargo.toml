@@ -1,0 +1,11 @@
+[package]
+name = "cas-print"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "cas 输出层：plain（可被 cas-parse 读回）与 LaTeX"
+
+[dependencies]
+cas-expr = { workspace = true }
+cas-domain = { workspace = true }

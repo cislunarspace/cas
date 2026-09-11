@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 29b0ae63e04b93d5e325419abeef1ffae1d322d936751f293c3c6dfa3e82e4bc # shrinks to s1 = Fn { head: 0, args: [Int(0)] }, s2 = Mul([Pow(Sym(3), Int(2)), Sym(0)])
