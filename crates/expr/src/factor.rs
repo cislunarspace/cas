@@ -1,7 +1,7 @@
-//! expr 层因式分解（M4 桥）：纯一元多项式表达式 → `factor_univariate`
-//! → 规范形重建 `cont · Π 因子^重数`。
+//! expr 层因式分解桥（M4/M5）：纯多项式表达式 → `Poly::factor`
+//! （1/2 变元完全，≥3 变元部分分解）→ 规范形重建 `cont · Π 因子^重数`。
 //!
-//! 非一元（含多符号）、非多项式（函数/浮点/负幂）成分时返回原节点。
+//! 非多项式（函数/浮点/负幂）成分时返回原节点。
 
 use crate::poly_bridge;
 
@@ -11,10 +11,7 @@ impl crate::Inner {
             Some(x) => x,
             None => return id,
         };
-        if ring.nvars() != 1 {
-            return id; // 多变元因式分解属 M5
-        }
-        let (cont, facs) = p.factor_univariate();
+        let (cont, facs) = p.factor();
         if facs.is_empty() {
             return id; // 常数
         }

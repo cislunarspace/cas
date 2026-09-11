@@ -184,8 +184,8 @@ impl Context {
         self.with(|c| c.cancel_at(e.id))
     }
 
-    /// 一元多项式因式分解（M4）：`cont · Π 因子^重数`，重建为规范形。
-    /// 非一元/非多项式输入返回原节点（多变元属 M5）。
+    /// 多项式因式分解（M4/M5）：`cont · Π 因子^重数`，重建为规范形。
+    /// 1/2 变元完全分解，≥3 变元部分（内容+平方自由）；非多项式输入返回原节点。
     pub fn factor(&self, e: &Expr) -> Expr {
         self.with(|c| c.factor_at(e.id))
     }
@@ -836,10 +836,23 @@ mod tests {
         let expect = x.clone().pow(4) + ctx.int(1);
         assert_eq!(g.raw_id(), expect.raw_id());
 
-        // 多符号输入：原样返回（同节点）
+        // 双变元：x^2 − y^2 → 两个一次因子（节点形态随 pp 归一约定，
+        // 断言用 dump 形态 + 随机点语义恒等）
         let y = ctx.sym("y");
-        let e = x.clone() * y.clone();
-        assert_eq!(ctx.factor(&e).raw_id(), e.raw_id());
+        let e = x.clone().pow(2) - y.clone().pow(2);
+        let g = ctx.factor(&e);
+        let s = ctx.inspect(|i| i.dump(g.raw_id()));
+        assert_eq!(
+            s,
+            "mul[int(-1), add[sym(x), sym(y)], add[sym(y), mul[int(-1), sym(x)]]]"
+        );
+        for (xv, yv) in [(3, 2), (-5, 7)] {
+            let pts = [
+                ("x", Rational::from_integer(&Integer::from_i64(xv))),
+                ("y", Rational::from_integer(&Integer::from_i64(yv))),
+            ];
+            assert_eq!(ctx.eval_rational(&e, &pts), ctx.eval_rational(&g, &pts));
+        }
     }
 
     #[test]
