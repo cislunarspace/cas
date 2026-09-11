@@ -3,9 +3,11 @@ resolver = "3"
 members = [
     "crates/domain",
     "crates/expr",
+    "crates/poly",
     "crates/print",
     "crates/parse",
     "crates/cas",
+    "xtask",
 ]
 
 [workspace.package]
@@ -20,6 +22,7 @@ num-integer = "0.1"
 proptest = "1"
 cas-domain = { path = "crates/domain" }
 cas-expr = { path = "crates/expr" }
+cas-poly = { path = "crates/poly" }
 cas-print = { path = "crates/print" }
 cas-parse = { path = "crates/parse" }
 cas = { path = "crates/cas" }
