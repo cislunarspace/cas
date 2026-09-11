@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+mod calculus;
 mod canonical;
 mod eval;
 mod factor;
@@ -190,6 +191,41 @@ impl Context {
         self.with(|c| c.factor_at(e.id))
     }
 
+    /// 符号求导（P1）：和/积/链式/幂（整数、有理、一般指数）与初等
+    /// 函数表（sin cos tan exp log sqrt，abs→sign）。输出规范形。
+    pub fn diff(&self, e: &Expr, x: &Expr) -> Expr {
+        match x_name_of(self, x) {
+            Some(name) => {
+                let sid = self.inner.borrow().syms.get(name.as_str()).copied();
+                match sid {
+                    Some(s) => self.with(|c| c.diff_at(e.id, s, 0)),
+                    None => self.with(|c| c.lit_int(0)),
+                }
+            }
+            None => self.with(|c| c.lit_int(0)),
+        }
+    }
+
+    /// Taylor 级数（P1）：x=a 处的多项式部分到 (x−a)^order（含）。
+    pub fn taylor(&self, e: &Expr, x: &Expr, at: i64, order: u32) -> Expr {
+        match x_name_of(self, x) {
+            Some(name) => {
+                let sid = self.inner.borrow().syms.get(name.as_str()).copied();
+                match sid {
+                    Some(s) => self.with(|c| c.taylor_at(e.id, s, at, order)),
+                    None => e.clone(),
+                }
+            }
+            None => e.clone(),
+        }
+    }
+
+    /// 定向化简（P1，L2）：常量折叠 + 无条件恒等式（sin²+cos²→1），
+    /// 自底向上单遍，确定性输出。
+    pub fn simplify(&self, e: &Expr) -> Expr {
+        self.with(|c| c.simplify_at(e.id, 0))
+    }
+
     /// 代换：按符号名替换子表达式（替换值须属同一 Context）。
     /// 重建经规范形构造器，`subst(e, x→x)` 与 `e` 同节点。
     pub fn subst(&self, e: &Expr, map: &[(&str, Expr)]) -> Expr {
@@ -221,6 +257,15 @@ impl Context {
             .collect::<std::collections::HashMap<u32, f64>>();
         eval::eval_float_at(&inner, e.id, &m, 0)
     }
+}
+
+
+/// 从（预期为 Sym 的）Expr 提取符号名（非 Sym 返回 None）。
+fn x_name_of(ctx: &Context, x: &Expr) -> Option<String> {
+    ctx.inspect(|i| match i.kind(x.raw_id()) {
+        Kind::Sym(name) => Some(name.to_string()),
+        _ => None,
+    })
 }
 
 impl Default for Context {
