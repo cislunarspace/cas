@@ -54,6 +54,7 @@ version = "0.1.0"
 dependencies = [
  "cas-domain",
  "cas-expr",
+ "cas-poly",
  "proptest",
 ]
 

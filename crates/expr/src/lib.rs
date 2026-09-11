@@ -25,6 +25,7 @@ mod eval;
 mod hash;
 mod node;
 mod order;
+mod poly_bridge;
 #[cfg(feature = "test-gen")]
 pub mod test_gen;
 mod transform;
@@ -735,6 +736,60 @@ mod tests {
         let p = x.clone() * y.clone();
         let q = ctx.subst(&p, &[("x", y.clone()), ("y", x.clone())]);
         assert_eq!(q.raw_id(), p.raw_id()); // x*y 交换后仍同节点
+    }
+
+    #[test]
+    fn 展开快慢路径同构() {
+        // M3 快路径（poly 域）与朴素 DAG 分配必须产出同一节点
+        let ctx = Context::new();
+        let (x, y, z, w) = crate::sym!(&ctx, x, y, z, w);
+        let syms = [x.clone(), y.clone(), z.clone(), w.clone()];
+
+        let mut xs = 777u64;
+        let mut nxt = move || {
+            xs ^= xs << 13;
+            xs ^= xs >> 7;
+            xs ^= xs << 17;
+            xs
+        };
+        fn gen_poly(
+            ctx: &Context,
+            syms: &[Expr],
+            nxt: &mut impl FnMut() -> u64,
+            depth: u32,
+        ) -> Expr {
+            if depth == 0 || nxt() % 3 == 0 {
+                match nxt() % 3 {
+                    0 => ctx.int((nxt() % 19) as i64 - 9),
+                    1 => ctx
+                        .rational((nxt() % 15) as i64 - 7, (nxt() % 8) as i64 + 2)
+                        .unwrap(),
+                    _ => syms[(nxt() % syms.len() as u64) as usize].clone(),
+                }
+            } else {
+                match nxt() % 3 {
+                    0 => gen_poly(ctx, syms, nxt, depth - 1) + gen_poly(ctx, syms, nxt, depth - 1),
+                    1 => gen_poly(ctx, syms, nxt, depth - 1) * gen_poly(ctx, syms, nxt, depth - 1),
+                    _ => gen_poly(ctx, syms, nxt, depth - 1).pow((nxt() % 5) as i64),
+                }
+            }
+        }
+        let slow_of = |ctx: &Context, e: &Expr| -> u32 {
+            let mut inner = ctx.inner.borrow_mut();
+            inner.expand_impl(e.raw_id(), 0, false)
+        };
+
+        for _ in 0..60 {
+            let e = gen_poly(&ctx, &syms, &mut nxt, 4);
+            let fast = ctx.expand(&e);
+            let slow = slow_of(&ctx, &e);
+            assert_eq!(fast.raw_id(), slow, "快慢路径不同构: {e:?}");
+        }
+
+        // 混合表达式（函数/浮点使快路径部分让位）仍须同构
+        let e = ctx.call("sin", std::slice::from_ref(&x)) * (y.clone() + z.clone()).pow(5)
+            + ctx.float(1.5) * (x.clone() + w.clone()).pow(3);
+        assert_eq!(ctx.expand(&e).raw_id(), slow_of(&ctx, &e));
     }
 
     #[test]

@@ -39,17 +39,37 @@ fn info_of(inner: &Inner, id: u32) -> Info {
 }
 
 impl Inner {
-    /// 展开：分配乘积 over 和式、展开非负整数幂、函数参数内部展开。
+    /// 展开：先尝试多项式快路径（纯多项式子树整体进 poly 域，M3），
+    /// 不适用则 DAG 分配。两条路径产出同一规范形节点（同构性有测试钉死）。
     pub(crate) fn expand_at(&mut self, id: u32, depth: u32) -> u32 {
+        self.expand_impl(id, depth, true)
+    }
+
+    /// `fast = false` 强制纯 DAG 分配（同构性测试的对照路径）。
+    pub(crate) fn expand_impl(&mut self, id: u32, depth: u32, fast: bool) -> u32 {
         assert!(depth <= 10_000, "表达式嵌套过深");
+        // 快路径：整个子树是纯多项式（含乘积分配与整数幂）→ poly 域一次算完
+        if fast {
+            if let Info::Mul(_) | Info::Pow { .. } = info_of(self, id) {
+                if let Some((ring, var_ids, p)) = crate::poly_bridge::to_poly(self, id) {
+                    return crate::poly_bridge::from_poly(self, &ring, &var_ids, &p);
+                }
+            }
+        }
         match info_of(self, id) {
             Info::Atom(_) => id,
             Info::Add(args) => {
-                let v: Vec<u32> = args.iter().map(|&a| self.expand_at(a, depth + 1)).collect();
+                let v: Vec<u32> = args
+                    .iter()
+                    .map(|&a| self.expand_impl(a, depth + 1, fast))
+                    .collect();
                 self.make_add(&v)
             }
             Info::Mul(args) => {
-                let v: Vec<u32> = args.iter().map(|&a| self.expand_at(a, depth + 1)).collect();
+                let v: Vec<u32> = args
+                    .iter()
+                    .map(|&a| self.expand_impl(a, depth + 1, fast))
+                    .collect();
                 // 逐因子分配；每步 make_add 合并同类项，钳制中间规模
                 let mut acc = self.sum_terms(v[0]);
                 for &f in &v[1..] {
@@ -72,7 +92,7 @@ impl Inner {
                 };
                 if let Some(k) = k {
                     if (2..=MAX_POW_EXPAND as i64).contains(&k) {
-                        let b = self.expand_at(base, depth + 1);
+                        let b = self.expand_impl(base, depth + 1, fast);
                         let bt = self.sum_terms(b);
                         if bt.len() as u64 * k as u64 <= MAX_EXPAND_TERMS {
                             let one = self.lit_int(1);
@@ -92,12 +112,15 @@ impl Inner {
                     }
                 }
                 // 负幂/超大指数/非整数指数：只展开内部
-                let b = self.expand_at(base, depth + 1);
-                let e = self.expand_at(exp, depth + 1);
+                let b = self.expand_impl(base, depth + 1, fast);
+                let e = self.expand_impl(exp, depth + 1, fast);
                 self.make_pow(b, e)
             }
             Info::Fn { head, args } => {
-                let v: Vec<u32> = args.iter().map(|&a| self.expand_at(a, depth + 1)).collect();
+                let v: Vec<u32> = args
+                    .iter()
+                    .map(|&a| self.expand_impl(a, depth + 1, fast))
+                    .collect();
                 self.fn_node_by_id(head, &v)
             }
         }

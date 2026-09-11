@@ -8,6 +8,7 @@ description = "cas 表达式层：arena + hash-consing、规范形构造、确�
 
 [dependencies]
 cas-domain = { workspace = true }
+cas-poly = { workspace = true }
 proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
