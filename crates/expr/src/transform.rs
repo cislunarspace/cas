@@ -4,9 +4,9 @@
 //! 中间规模被规范形钳制在真实支撑集大小（(x+y+z+w)^20 全程 ≤ 1771 项）。
 //! 多项式内核承接的快速 expand（D3 桥接）属 M3。
 
-use crate::Inner;
-use cas_domain::Rational;
 use crate::node::Node;
+use crate::{CasError, CasErrorKind, Inner};
+use cas_domain::Rational;
 use std::collections::HashMap;
 
 /// 幂展开的指数上限。
@@ -284,4 +284,214 @@ impl Inner {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 按幂次提取系数（expr2poly / poly_simplify 的对应物）
+// ---------------------------------------------------------------------------
+
+/// 单项式：指数向量（按 vars 顺序）+ 系数因子节点（空 = 系数 1）。
+///
+/// 纯读取中间量：本阶段不构造新表达式（`inspect`/`with` 的借用是互斥的），
+/// 由调用方在释放读借用后再合并、构造 `Expr`。
+pub(crate) struct Mono {
+    pub(crate) exps: Vec<u32>,
+    pub(crate) coef: Vec<u32>,
+}
+
+/// 系数因子组合的项数守卫（与 expand 的 `MAX_EXPAND_TERMS` 同量级）。
+const MAX_MONO_TERMS: usize = 1_000_000;
+/// 递归深度守卫。
+const MAX_MONO_DEPTH: u32 = 10_000;
+
+fn one_mono(n: usize) -> Mono {
+    Mono {
+        exps: vec![0; n],
+        coef: Vec::new(),
+    }
+}
+
+fn mul_lists(a: &[Mono], b: &[Mono], n: usize) -> Vec<Mono> {
+    let mut out = Vec::with_capacity(a.len() * b.len());
+    for x in a {
+        for y in b {
+            let mut exps = x.exps.clone();
+            for (e, add) in exps.iter_mut().zip(&y.exps) {
+                *e += *add;
+            }
+            let mut coef = x.coef.clone();
+            coef.extend_from_slice(&y.coef);
+            let _ = n;
+            out.push(Mono { exps, coef });
+        }
+    }
+    out
+}
+
+/// 判断子树内是否含 `vars` 中的符号（用于判定函数节点是否非多项式）。
+fn contains_var(inner: &Inner, id: u32, vars: &[u32], depth: u32) -> Result<bool, CasError> {
+    if depth > MAX_MONO_DEPTH {
+        return Err(CasError::new(CasErrorKind::NonPolynomial, "表达式嵌套过深"));
+    }
+    Ok(match &inner.nodes[id as usize] {
+        Node::Sym(s) => vars.contains(s),
+        Node::Fn { args, .. } => {
+            let ids: Vec<u32> = inner.node_args(*args).to_vec();
+            let mut found = false;
+            for a in ids {
+                if contains_var(inner, a, vars, depth + 1)? {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        }
+        Node::Pow { base, exp } => {
+            contains_var(inner, *base, vars, depth + 1)?
+                || contains_var(inner, *exp, vars, depth + 1)?
+        }
+        Node::Mul { args } | Node::Add { args } => {
+            let ids: Vec<u32> = inner.node_args(*args).to_vec();
+            let mut found = false;
+            for a in ids {
+                if contains_var(inner, a, vars, depth + 1)? {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        }
+        Node::Int(_) | Node::Rat(_) | Node::Float { .. } => false,
+    })
+}
+
+/// 把 `id` 展开成单项式列表（可能含同指数多项，由调用方合并）。
+pub(crate) fn monomials_at(
+    inner: &Inner,
+    id: u32,
+    vars: &[u32],
+    depth: u32,
+) -> Result<Vec<Mono>, CasError> {
+    let n = vars.len();
+    if depth > MAX_MONO_DEPTH {
+        return Err(CasError::new(CasErrorKind::NonPolynomial, "表达式嵌套过深"));
+    }
+    Ok(match &inner.nodes[id as usize] {
+        Node::Int(_) | Node::Rat(_) | Node::Float { .. } => vec![Mono {
+            exps: vec![0; n],
+            coef: vec![id],
+        }],
+        Node::Sym(s) => match vars.iter().position(|v| v == s) {
+            Some(k) => {
+                let mut exps = vec![0; n];
+                exps[k] = 1;
+                vec![Mono { exps, coef: vec![] }]
+            }
+            None => vec![Mono {
+                exps: vec![0; n],
+                coef: vec![id],
+            }],
+        },
+        Node::Fn { args, .. } => {
+            let ids: Vec<u32> = inner.node_args(*args).to_vec();
+            for a in ids {
+                if contains_var(inner, a, vars, depth + 1)? {
+                    return Err(CasError::new(
+                        CasErrorKind::NonPolynomial,
+                        "函数节点内部含变量",
+                    ));
+                }
+            }
+            vec![Mono {
+                exps: vec![0; n],
+                coef: vec![id],
+            }]
+        }
+        Node::Pow { base, exp } => {
+            let k = match &inner.nodes[*exp as usize] {
+                Node::Int(v) => v.to_i64().ok_or_else(|| {
+                    CasError::new(CasErrorKind::NonPolynomial, "幂指数不是定值整数")
+                })?,
+                _ => {
+                    return Err(CasError::new(
+                        CasErrorKind::NonPolynomial,
+                        "幂指数不是整数常量",
+                    ));
+                }
+            };
+            if k < 0 {
+                // 只有**变量**的负指数才是错误（Laurent 情形）；非变量符号的负幂
+                // （如 r0^{-1}）属于系数的一部分，照常保留。
+                let is_var =
+                    matches!(&inner.nodes[*base as usize], Node::Sym(s) if vars.contains(s));
+                if is_var {
+                    return Err(CasError::new(
+                        CasErrorKind::NegativeExponent,
+                        "变量出现负指数",
+                    ));
+                }
+                return Ok(vec![Mono {
+                    exps: vec![0; n],
+                    coef: vec![id],
+                }]);
+            }
+            if k == 0 {
+                vec![one_mono(n)]
+            } else if let Node::Sym(s) = &inner.nodes[*base as usize] {
+                match vars.iter().position(|v| v == s) {
+                    Some(pos) => {
+                        let mut exps = vec![0; n];
+                        exps[pos] = k as u32;
+                        vec![Mono { exps, coef: vec![] }]
+                    }
+                    None => vec![Mono {
+                        exps: vec![0; n],
+                        coef: vec![id],
+                    }],
+                }
+            } else {
+                let base_monos = monomials_at(inner, *base, vars, depth + 1)?;
+                let mut acc = vec![one_mono(n)];
+                for _ in 0..k {
+                    acc = mul_lists(&acc, &base_monos, n);
+                    if acc.len() > MAX_MONO_TERMS {
+                        return Err(CasError::new(
+                            CasErrorKind::NonPolynomial,
+                            "幂展开项数超过守卫上限",
+                        ));
+                    }
+                }
+                acc
+            }
+        }
+        Node::Mul { args } => {
+            let ids: Vec<u32> = inner.node_args(*args).to_vec();
+            let mut acc = vec![one_mono(n)];
+            for a in ids {
+                let b = monomials_at(inner, a, vars, depth + 1)?;
+                acc = mul_lists(&acc, &b, n);
+                if acc.len() > MAX_MONO_TERMS {
+                    return Err(CasError::new(
+                        CasErrorKind::NonPolynomial,
+                        "乘法展开项数超过守卫上限",
+                    ));
+                }
+            }
+            acc
+        }
+        Node::Add { args } => {
+            let ids: Vec<u32> = inner.node_args(*args).to_vec();
+            let mut out = Vec::new();
+            for a in ids {
+                out.extend(monomials_at(inner, a, vars, depth + 1)?);
+                if out.len() > MAX_MONO_TERMS {
+                    return Err(CasError::new(
+                        CasErrorKind::NonPolynomial,
+                        "加法展开项数超过守卫上限",
+                    ));
+                }
+            }
+            out
+        }
+    })
 }

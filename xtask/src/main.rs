@@ -13,6 +13,8 @@
 
 mod bench;
 mod corpus;
+mod hamilton;
+mod legendre;
 mod oracle;
 mod poisson;
 mod util;
@@ -25,6 +27,8 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("corpus") => corpus::run(&args[1..]),
         Some("poisson") => poisson::run(&args[1..]),
+        Some("legendre") => legendre::run(&args[1..]),
+        Some("hamilton") => hamilton::run(&args[1..]),
         Some("oracle") => oracle::run(&args[1..]),
         Some("bench") => bench::run(&args[1..]),
         _ => {

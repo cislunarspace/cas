@@ -109,6 +109,38 @@ impl Context {
         self.with(|c| c.lit_integer(v))
     }
 
+    /// 带假设声明符号（D5）：闭包补全（even⇒integer⇒…）+ 冲突检测；
+    /// 同名重设不同假设报错（返回 Err 由调用方决定——MATLAB assume
+    /// 的覆盖语义是有意不采用的，见 DESIGN D5）。
+    pub fn sym_with(&self, name: &str, preds: &[assume::Predicate]) -> Result<Expr, String> {
+        validate_name(name, "符号");
+        let a = assume::Assumptions::union(preds);
+        let e = self.sym(name);
+        let sid = self.inner.borrow().syms.get(name).copied();
+        if let Some(sid) = sid {
+            self.inner
+                .borrow_mut()
+                .sym_assumptions
+                .entry(sid)
+                .and_modify(|old| {
+                    assert!(
+                        *old == a,
+                        "符号 {name} 的假设只能一次性设定（当前 {:?}，重设 {:?}）",
+                        old,
+                        a
+                    );
+                })
+                .or_insert(a);
+        }
+        Ok(e)
+    }
+
+    /// 三值假设查询（D5）：True / False / Unknown。
+    pub fn query(&self, e: &Expr, p: assume::Predicate) -> assume::Trinary {
+        let inner = self.inner.borrow();
+        inner.query_at(e.id, p, 0)
+    }
+
     /// 浮点字面量。负值返回 `-1 * |v|` 的规范形（Float 节点恒非负）；
     /// NaN 属编程错误。
     pub fn float(&self, v: f64) -> Expr {
@@ -195,38 +227,6 @@ impl Context {
         self.with(|c| c.factor_at(e.id))
     }
 
-    /// 带假设声明符号（D5）：闭包补全（even⇒integer⇒…）+ 冲突检测；
-    /// 同名重设不同假设报错（返回 Err 由调用方决定——MATLAB assume
-    /// 的覆盖语义是有意不采用的，见 DESIGN D5）。
-    pub fn sym_with(&self, name: &str, preds: &[assume::Predicate]) -> Result<Expr, String> {
-        validate_name(name, "符号");
-        let a = assume::Assumptions::union(preds);
-        let e = self.sym(name);
-        let sid = self.inner.borrow().syms.get(name).copied();
-        if let Some(sid) = sid {
-            self.inner
-                .borrow_mut()
-                .sym_assumptions
-                .entry(sid)
-                .and_modify(|old| {
-                    assert!(
-                        *old == a,
-                        "符号 {name} 的假设只能一次性设定（当前 {:?}，重设 {:?}）",
-                        old,
-                        a
-                    );
-                })
-                .or_insert(a);
-        }
-        Ok(e)
-    }
-
-    /// 三值假设查询（D5）：True / False / Unknown。
-    pub fn query(&self, e: &Expr, p: assume::Predicate) -> assume::Trinary {
-        let inner = self.inner.borrow();
-        inner.query_at(e.id, p, 0)
-    }
-
     /// 符号求导（P1）：和/积/链式/幂（整数、有理、一般指数）与初等
     /// 函数表（sin cos tan exp log sqrt，abs→sign）。输出规范形。
     pub fn diff(&self, e: &Expr, x: &Expr) -> Expr {
@@ -293,8 +293,77 @@ impl Context {
             .collect::<std::collections::HashMap<u32, f64>>();
         eval::eval_float_at(&inner, e.id, &m, 0)
     }
-}
 
+    /// 把 `e` 视作 `vars` 的多项式，返回 `(指数向量, 系数)` 列表，指数按 `vars` 顺序。
+    ///
+    /// - 依赖 `e` 已 [`Context::expand`]（未展开也能跑，但同幂次可能分散多项）。
+    /// - 同指数的项会合并；系数保持符号形式（不数值化）。
+    /// - `vars` 之外的自由符号被视为系数的一部分。
+    /// - 变量的非多项式用法返回 [`CasErrorKind::NonPolynomial`]，负指数返回
+    ///   [`CasErrorKind::NegativeExponent`]，变量名不存在返回 [`CasErrorKind::UnknownSymbol`]。
+    pub fn monomial_coeffs(
+        &self,
+        e: &Expr,
+        vars: &[&str],
+    ) -> Result<Vec<(Vec<u32>, Expr)>, CasError> {
+        let var_ids: Vec<u32> = {
+            let inner = self.inner.borrow();
+            let mut ids = Vec::with_capacity(vars.len());
+            for name in vars {
+                match inner.syms.get(*name) {
+                    Some(&s) => ids.push(s),
+                    None => {
+                        return Err(CasError::new(
+                            CasErrorKind::UnknownSymbol,
+                            format!("变量 {name} 不在该 Context 中"),
+                        ));
+                    }
+                }
+            }
+            ids
+        };
+        let monos = {
+            let inner = self.inner.borrow();
+            transform::monomials_at(&inner, e.id, &var_ids, 0)?
+        };
+
+        // 按指数分组：组内每个单项式的系数 = 其因子之积；同类项之间**相加**。
+        let mut groups: HashMap<Vec<u32>, Vec<Vec<u32>>> = HashMap::new();
+        let mut order: Vec<Vec<u32>> = Vec::new();
+        for m in monos {
+            match groups.get_mut(&m.exps) {
+                Some(list) => list.push(m.coef),
+                None => {
+                    order.push(m.exps.clone());
+                    groups.insert(m.exps, vec![m.coef]);
+                }
+            }
+        }
+        let mut out = Vec::with_capacity(order.len());
+        for exps in order {
+            let terms = groups.remove(&exps).unwrap_or_default();
+            let coef = self.with(|c| {
+                let ids: Vec<u32> = terms
+                    .iter()
+                    .map(|factors| {
+                        if factors.is_empty() {
+                            c.lit_int(1)
+                        } else {
+                            c.make_mul(factors)
+                        }
+                    })
+                    .collect();
+                if ids.len() == 1 {
+                    ids[0]
+                } else {
+                    c.make_add(&ids)
+                }
+            });
+            out.push((exps, coef));
+        }
+        Ok(out)
+    }
+}
 
 /// 从（预期为 Sym 的）Expr 提取符号名（非 Sym 返回 None）。
 fn x_name_of(ctx: &Context, x: &Expr) -> Option<String> {
@@ -482,6 +551,41 @@ impl IntoExpr for f64 {
         c.lit_float(self)
     }
 }
+
+/// 按幂次提取系数时的错误类别。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CasErrorKind {
+    /// 出现变量的非多项式用法（如 `sqrt(x)`、变量作分母）。
+    NonPolynomial,
+    /// 变量出现负指数（Laurent 情形，当前不支持）。
+    NegativeExponent,
+    /// 传入的变量名在该 Context 中不存在。
+    UnknownSymbol,
+}
+
+/// `monomial_coeffs` 的错误。
+#[derive(Clone, Debug)]
+pub struct CasError {
+    pub kind: CasErrorKind,
+    pub msg: String,
+}
+
+impl CasError {
+    pub fn new(kind: CasErrorKind, msg: impl Into<String>) -> Self {
+        CasError {
+            kind,
+            msg: msg.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for CasError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {}", self.kind, self.msg)
+    }
+}
+
+impl std::error::Error for CasError {}
 
 /// 只读检视器：在 [`Context::inspect`] 闭包内遍历表达式结构。
 pub struct Inspector<'a> {
@@ -887,6 +991,51 @@ mod tests {
     }
 
     #[test]
+    fn 约化() {
+        let ctx = Context::new();
+        let x = ctx.sym("x");
+        let y = ctx.sym("y");
+        let z = ctx.sym("z");
+
+        // (x^2 - y^2)/(x - y) → x + y（节点恒等）
+        let e = (x.clone().pow(2) - y.clone().pow(2)) / (x.clone() - y.clone());
+        let expect = x.clone() + y.clone();
+        assert_eq!(ctx.cancel(&e).raw_id(), expect.raw_id());
+
+        // x*y/(x*z) → y/z（分母为复合 Mul 的情形）
+        let e = (x.clone() * y.clone()) / (x.clone() * z.clone());
+        let expect = y.clone() / z.clone();
+        assert_eq!(ctx.cancel(&e).raw_id(), expect.raw_id());
+
+        // (x*y + x*z)/x → y + z
+        let e = (x.clone() * y.clone() + x.clone() * z.clone()) / x.clone();
+        let expect = y.clone() + z.clone();
+        assert_eq!(ctx.cancel(&e).raw_id(), expect.raw_id());
+
+        // 互素：返回原节点
+        let e = (x.clone() + y.clone()) / x.clone();
+        assert_eq!(ctx.cancel(&e).raw_id(), e.raw_id());
+
+        // 语义保持：约化前后在随机点精确同值
+        let e = (x.clone().pow(2) * y.clone() - y.clone().pow(3))
+            / (x.clone() * y.clone() + y.clone().pow(2));
+        let g = ctx.cancel(&e);
+        for (xv, yv) in [(2, 3), (-4, 5), (7, -2)] {
+            let pts = [
+                ("x", Rational::from_integer(&Integer::from_i64(xv))),
+                ("y", Rational::from_integer(&Integer::from_i64(yv))),
+            ];
+            assert_eq!(ctx.eval_rational(&e, &pts), ctx.eval_rational(&g, &pts));
+        }
+
+        // 浮点因子保留：1.5*(x^2 - 1)/(x - 1) → 1.5*(x + 1)
+        let e = ctx.float(1.5) * ((x.clone().pow(2) - ctx.int(1)) / (x.clone() - ctx.int(1)));
+        let g = ctx.cancel(&e);
+        let v = ctx.eval_float(&g, &[("x", 3.0)]).unwrap();
+        assert!((v - 1.5 * 4.0).abs() < 1e-12);
+    }
+
+    #[test]
     fn 因式分解() {
         let ctx = Context::new();
         let x = ctx.sym("x");
@@ -918,7 +1067,7 @@ mod tests {
         assert_eq!(g.raw_id(), expect.raw_id());
 
         // 双变元：x^2 − y^2 → 两个一次因子（节点形态随 pp 归一约定，
-        // 断言用 dump 形态 + 随机点语义恒等）
+        // 断言用语义恒等 + 因子可观测形态）
         let y = ctx.sym("y");
         let e = x.clone().pow(2) - y.clone().pow(2);
         let g = ctx.factor(&e);
