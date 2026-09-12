@@ -8,6 +8,7 @@
 
 依赖：sympy（版本锁定见 requirements.txt）。
 """
+
 import sys
 from sympy import Rational, cancel, expand, symbols
 from sympy.parsing.sympy_parser import parse_expr
@@ -27,6 +28,7 @@ def main() -> None:
             if tag == "A":
                 # 假设对拍：x 声明 positive，simplify 后点值（正点）
                 from sympy import Symbol, simplify as sym_simplify
+
                 xp = Symbol("x", positive=True)
                 xnum, xden = pt.split()[0].split("/")
                 env = {xp: Rational(int(xnum), int(xden))}
@@ -46,6 +48,7 @@ def main() -> None:
                 # diff / taylor / simplify 对拍：对表达式做对应变换后在点求值
                 from sympy import diff as sym_diff
                 from sympy.series import series as sym_series
+
                 xv = VARS[0]  # 主变元固定 x
                 if tag == "D":
                     val = sym_diff(expr, xv).subs(env)
@@ -55,6 +58,7 @@ def main() -> None:
                     val = ser.subs(env)
                 else:
                     from sympy import simplify as sym_simplify
+
                     val = sym_simplify(expr).subs(env)
                 # 三角在整数点的值是符号的：浮点对拍（30 位精度，容差在
                 # xtask 端控制）
@@ -67,6 +71,7 @@ def main() -> None:
             if tag == "F":
                 # 因式分解对拍：返回 重数:次数 多重集（排序后序列化）；不需点
                 from sympy import factor_list, total_degree
+
                 _, facs = factor_list(expr)
                 ms = sorted(f"{m}:{total_degree(f)}" for f, m in facs)
                 print(f"V\t{i}\t{','.join(ms)}", flush=True)

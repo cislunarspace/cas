@@ -70,7 +70,9 @@ fn ip_exact_div(a: &IPoly, b: &IPoly) -> Option<IPoly> {
         let t = lr / lb;
         q[dr - db] = t;
         for (i, &c) in b.iter().enumerate() {
-            r[dr - db + i] -= t * c;
+            // 错误候选的试除中间量可指数增长：i128 乘法触界视为不可整除，
+            // 跳过该候选（真因子除法的中间量受 Mignotte 型界控制，远不及 2^127）
+            r[dr - db + i] = r[dr - db + i].checked_sub(t.checked_mul(c)?)?;
         }
         ip_trim(&mut r);
     }
