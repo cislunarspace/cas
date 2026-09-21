@@ -1,11 +1,11 @@
 # cas：Rust 通用符号代数引擎 · 设计文档 v0.1
 
-- 状态：设计已定稿并进入实现——D1–D6 已拆为 ADR-016–021（`docs/adr/`），M1–M5 与 D5 已落地，验收状态逐项见 [MATLAB-PARITY.md](MATLAB-PARITY.md)。
+- 状态：设计已定稿并进入实现——D1–D6 见本文各节，M1–M5 与 D5 已落地，验收状态逐项见 [MATLAB-PARITY.md](MATLAB-PARITY.md)。
 - 日期：2026-09-11。生态调研结论截至本日（§2 附来源）。
 - 定位：可当依赖用的泛用 CAS 库——精确算术、表达式树、化简、代换、展开、求导、
   多项式代数（含 Gröbner）、代码生成。性能对标 C++ 系内核（FLINT / Singular 量级），
   oracle 用 sympy；不是 sympy 的 Rust 复刻。
-- 本文档只定设计与验收，不含实现细节。D1–D6 已拆为 ADR-016–021；术语定义在 §12，
+- 本文档只定设计与验收，不含实现细节；D1–D6 的取舍以各节正文与 git 提交历史为准。术语定义在 §12，
   独立 `CONTEXT.md` 尚未建立（建立时根目录引入 `CONTEXT-MAP.md`，模式见 `docs/agents/domain.md`）。
 
 ---
@@ -467,7 +467,7 @@ cas/
 | 无 GMP 默认档，系数密集负载可能慢 | 性能目标 | D2 决策点 + rug feature；numerica 本身有 rug 后端可透传 |
 | 追平 sympy 长尾的功能蔓延 | 范围失控 | §1 非目标清单 + 差分报告"theirs-longer"只统计不立项 |
 | numerica 年轻（2026-07 v2.2），API 可能漂移 | 后端迁移成本 | Domain trait 隔离 + num-bigint 备选档；锁定版本 |
-| 单人维护的 bus factor | 项目连续性 | 决策全部 ADR 化；接口窄、文档齐，降低接手成本 |
+| 单人维护的 bus factor | 项目连续性 | 决策与取舍写进提交信息与文档；接口窄、文档齐，降低接手成本 |
 
 ## 11. 开放问题（评审时拍板，不阻塞骨架启动）
 
