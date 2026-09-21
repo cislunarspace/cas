@@ -1,12 +1,12 @@
 # cas：Rust 通用符号代数引擎 · 设计文档 v0.1
 
-- 状态：草案，待评审。
+- 状态：设计已定稿并进入实现——D1–D6 已拆为 ADR-016–021（`docs/adr/`），M1–M5 与 D5 已落地，验收状态逐项见 [MATLAB-PARITY.md](MATLAB-PARITY.md)。
 - 日期：2026-09-11。生态调研结论截至本日（§2 附来源）。
 - 定位：可当依赖用的泛用 CAS 库——精确算术、表达式树、化简、代换、展开、求导、
   多项式代数（含 Gröbner）、代码生成。性能对标 C++ 系内核（FLINT / Singular 量级），
   oracle 用 sympy；不是 sympy 的 Rust 复刻。
-- 本文档只定设计与验收，不含实现。评审通过后：D1–D6 各拆一篇 ADR（`docs/adr/016+`）；
-  cas 子工作区获得自己的 CONTEXT.md（届时根目录引入 CONTEXT-MAP.md），术语先见 §12。
+- 本文档只定设计与验收，不含实现细节。D1–D6 已拆为 ADR-016–021；术语定义在 §12，
+  独立 `CONTEXT.md` 尚未建立（建立时根目录引入 `CONTEXT-MAP.md`，模式见 `docs/agents/domain.md`）。
 
 ---
 
@@ -554,7 +554,7 @@ poisson/oracle/bench 子命令与 corpus --eval 档；`oracle/sympy_expand.py`�
 
 验收（对照 §5 M2 行）：
 
-- **硬门槛「5000 例随机 expand 语义一致」通过**：sympy 交叉精确求值
+- **硬门槛“5000 例随机 expand 语义一致”通过**：sympy 交叉精确求值
   15000 点值全部相等，0 不一致、0 跳过；我方 expand+求值 25.3 万条/s，
   sympy 1029 条/s（同口径，含其 expand+subs）。
 - **跟踪指标 expand (1+x+y+z+w)^20 < 1 s 达标**：10626 项（二项式校验✓）
