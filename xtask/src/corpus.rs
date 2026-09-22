@@ -5,11 +5,11 @@
 //! 与 cas 的 parse→eval、parse→print→parse→eval 两条通道对拍。
 
 use crate::util::{Lcg, fnv64};
-use cas::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::process::ExitCode;
 use std::time::Instant;
+use symcas::prelude::*;
 
 pub(crate) fn run(args: &[String]) -> ExitCode {
     let file = crate::arg(
@@ -36,7 +36,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let mut fails: Vec<(usize, String, &str)> = Vec::new();
     let mut exprs = Vec::with_capacity(corpus.len());
     for (i, e) in corpus.iter().enumerate() {
-        match cas::parse(&ctx, e) {
+        match symcas::parse(&ctx, e) {
             Ok(x) => exprs.push((i, x)),
             Err(err) => fails.push((i, err.to_string(), e.as_str())),
         }
@@ -47,14 +47,14 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let t = Instant::now();
     let texts: Vec<(usize, String)> = exprs
         .iter()
-        .map(|(i, e)| (*i, cas::plain(&ctx, e)))
+        .map(|(i, e)| (*i, symcas::plain(&ctx, e)))
         .collect();
     let d_print = t.elapsed();
 
     let t = Instant::now();
     let mut rt_fail: Vec<usize> = Vec::new();
     for ((i, e), (_, txt)) in exprs.iter().zip(&texts) {
-        match cas::parse(&ctx, txt) {
+        match symcas::parse(&ctx, txt) {
             Ok(back) => {
                 if !(back == *e) {
                     rt_fail.push(*i);
@@ -71,9 +71,9 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
     let mut xc_fail: Vec<usize> = Vec::new();
     let ctx2 = Context::new();
     for (i, txt) in &texts {
-        match cas::parse(&ctx2, txt) {
+        match symcas::parse(&ctx2, txt) {
             Ok(e2) => {
-                if cas::plain(&ctx2, &e2) != *txt {
+                if symcas::plain(&ctx2, &e2) != *txt {
                     xc_fail.push(*i);
                 }
             }
@@ -152,7 +152,7 @@ fn eval_cross_check(
     // 往返节点（canonical 文本再解析），供通道 C
     let roundtrip: Vec<(usize, Expr)> = texts
         .iter()
-        .map(|(i, t)| (*i, cas::parse(ctx, t).expect("M1 档已保证可解析")))
+        .map(|(i, t)| (*i, symcas::parse(ctx, t).expect("M1 档已保证可解析")))
         .collect();
 
     for _ in 0..rounds {

@@ -1,9 +1,9 @@
 //! 全管线性能探针（#[ignore]，手动运行）：build / plain / parse / alt 分相计时。
-//! 运行：cargo test -p cas --test perf_probe -- --ignored --nocapture
+//! 运行：cargo test -p symcas --test perf_probe -- --ignored --nocapture
 
-use cas::prelude::*;
 use cas_expr::test_gen::{self, Lcg, Shape};
 use std::time::{Duration, Instant};
+use symcas::prelude::*;
 
 fn rand_shape(rng: &mut Lcg, depth: u32) -> Shape {
     if depth == 0 || rng.next_u64() % 3 == 0 {
@@ -66,12 +66,12 @@ fn 探针_全管线计时() {
         t_build += d_build;
 
         let t = Instant::now();
-        let txt = cas::plain(&ctx, &e);
+        let txt = symcas::plain(&ctx, &e);
         let d_plain = t.elapsed();
         t_plain += d_plain;
 
         let t = Instant::now();
-        let back = cas::parse(&ctx, &txt).expect("往返解析");
+        let back = symcas::parse(&ctx, &txt).expect("往返解析");
         let d_parse = t.elapsed();
         t_parse += d_parse;
         assert!(back == e);

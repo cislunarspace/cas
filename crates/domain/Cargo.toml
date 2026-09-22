@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "cas 数值层：任意精度整数与有理数（i64 内联 + 大数后备的混合表示）"
+description = "cas-domain: Arbitrary precision numeric layer for symcas (inline i64 and big integers/rationals)"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 num-bigint = { workspace = true }

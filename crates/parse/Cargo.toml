@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "cas 解析层：plain 文法（与 cas-print 互为往返）"
+description = "cas-parse: Recursive descent parser for symcas plain grammar with roundtrip guarantee"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 cas-expr = { workspace = true }

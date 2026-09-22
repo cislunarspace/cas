@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "cas 多项式层：有序稀疏分布式多项式（泛型于 Ring 系数）"
+description = "cas-poly: Ordered sparse distributed multivariate polynomials generic over coefficient rings"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 cas-domain = { workspace = true }

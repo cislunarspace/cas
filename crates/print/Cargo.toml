@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "cas 输出层：plain（可被 cas-parse 读回）与 LaTeX"
+description = "cas-print: Plain roundtrip and LaTeX formatting for symcas expressions"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 cas-expr = { workspace = true }

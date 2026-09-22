@@ -15,14 +15,19 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/cislunarspace/cas"
+homepage = "https://github.com/cislunarspace/cas"
+readme = "README.md"
+categories = ["mathematics", "science"]
+keywords = ["cas", "computer-algebra", "symbolic", "mathematics"]
 
 [workspace.dependencies]
 num-bigint = "0.4"
 num-integer = "0.1"
 proptest = "1"
-cas-domain = { path = "crates/domain" }
-cas-expr = { path = "crates/expr" }
-cas-poly = { path = "crates/poly" }
-cas-print = { path = "crates/print" }
-cas-parse = { path = "crates/parse" }
-cas = { path = "crates/cas" }
+cas-domain = { version = "0.1.0", path = "crates/domain" }
+cas-expr = { version = "0.1.0", path = "crates/expr" }
+cas-poly = { version = "0.1.0", path = "crates/poly" }
+cas-print = { version = "0.1.0", path = "crates/print" }
+cas-parse = { version = "0.1.0", path = "crates/parse" }
+symcas = { version = "0.1.0", path = "crates/cas" }

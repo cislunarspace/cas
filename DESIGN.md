@@ -6,7 +6,8 @@
   多项式代数（含 Gröbner）、代码生成。性能对标 C++ 系内核（FLINT / Singular 量级），
   oracle 用 sympy；不是 sympy 的 Rust 复刻。
 - 本文档只定设计与验收，不含实现细节；D1–D6 的取舍以各节正文与 git 提交历史为准。术语定义在 §12，
-  独立 `CONTEXT.md` 尚未建立（建立时根目录引入 `CONTEXT-MAP.md`，模式见 `docs/agents.md`）。
+  独立 `CONTEXT.md` 尚未建立（建立时根目录引入 `CONTEXT-MAP.md`，模式见
+  [qiao 文档约定](https://github.com/cislunarspace/qiao/blob/master/docs/agents.md)）。
 
 ---
 

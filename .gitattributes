@@ -1,0 +1,4 @@
+# 行尾统一为 LF 入库；*.sh 必须保持 LF——跨平台 checkout（Windows autocrlf=true）
+# 不得转 CRLF，否则脚本在 Linux 服务器上无法执行
+* text=auto
+*.sh text eol=lf

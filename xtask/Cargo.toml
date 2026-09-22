@@ -5,9 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "cas 开发任务：语料分析、快照、基准的入口"
+publish = false
 
 [dependencies]
-cas = { workspace = true }
+symcas = { workspace = true }
 cas-domain = { workspace = true }
 cas-poly = { workspace = true }
 cas-expr = { workspace = true }

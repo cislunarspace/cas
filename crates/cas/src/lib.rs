@@ -1,21 +1,22 @@
-//! # cas——Rust 通用符号代数引擎
+//! # symcas - Fast, deterministic computer algebra system in Rust
 //!
-//! P0-M1 骨架：表达式规范形（arena + hash-consing）、确定性全序、
-//! plain/LaTeX 输出、可往返解析。多项式内核（M2）、求导与级数（P1）、
-//! Gröbner（P2）、代码生成（P3）按 `cas/DESIGN.md` 分期落地。
+//! Core features: canonical expression representation (arena + hash-consing),
+//! deterministic total order, plain / LaTeX formatting, and roundtrip parsing.
+//! Polynomial kernel, differentiation, series expansion, and simplification.
 //!
-//! # 例 1：构造与规范形
+//! # Example 1: Construction and Canonical Form
 //!
 //! ```
-//! use cas::prelude::*;
+//! use symcas::prelude::*;
 //!
 //! let ctx = Context::new();
 //! let x = ctx.sym("x");
 //! let y = ctx.sym("y");
 //!
-//! // 运算符重载构造规范形：扁平化、排序、数值折叠、同类合并即刻发生
+//! // Operator overloading constructs canonical forms: flattening, ordering,
+//! // exact arithmetic folding, and term combination happen immediately.
 //! let e = (x.clone() + y.clone()).pow(3) - x.clone().pow(3) - y.clone().pow(3);
-//! assert_eq!(cas::plain(&ctx, &e), "(x + y)^3 - x^3 - y^3");
+//! assert_eq!(symcas::plain(&ctx, &e), "(x + y)^3 - x^3 - y^3");
 //!
 //! // 同一数学内容的两条构造路径落在同一节点（hash-consing）
 //! let a = x.clone() + x.clone();
@@ -26,16 +27,16 @@
 //! # 例 2：解析与往返
 //!
 //! ```
-//! use cas::prelude::*;
+//! use symcas::prelude::*;
 //!
 //! let ctx = Context::new();
 //! let x = ctx.sym("x");
 //!
-//! let e = cas::parse(&ctx, "x + x + 1/2*x").unwrap();
-//! assert_eq!(cas::plain(&ctx, &e), "5/2*x");
+//! let e = symcas::parse(&ctx, "x + x + 1/2*x").unwrap();
+//! assert_eq!(symcas::plain(&ctx, &e), "5/2*x");
 //!
-//! // plain 输出可解析回同一表达式（D6 往返承诺）
-//! let back = cas::parse(&ctx, "5/2*x").unwrap();
+//! // Plain output parses back to the exact same expression node (roundtrip guarantee)
+//! let back = symcas::parse(&ctx, "5/2*x").unwrap();
 //! assert!(back == e);
 //!
 //! // sym! 宏批量声明符号

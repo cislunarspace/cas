@@ -30,17 +30,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
-name = "cas"
-version = "0.1.0"
-dependencies = [
- "cas-domain",
- "cas-expr",
- "cas-parse",
- "cas-print",
- "proptest",
-]
-
-[[package]]
 name = "cas-domain"
 version = "0.1.0"
 dependencies = [
@@ -313,6 +302,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "symcas"
+version = "0.1.0"
+dependencies = [
+ "cas-domain",
+ "cas-expr",
+ "cas-parse",
+ "cas-print",
+ "proptest",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -391,10 +391,10 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 name = "xtask"
 version = "0.1.0"
 dependencies = [
- "cas",
  "cas-domain",
  "cas-expr",
  "cas-poly",
+ "symcas",
 ]
 
 [[package]]

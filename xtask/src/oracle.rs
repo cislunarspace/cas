@@ -10,11 +10,11 @@
 //! 在同点值相等 ⇔ 语义一致；字符串形态差异不作失败。
 
 use crate::util::Lcg;
-use cas::prelude::*;
 use cas_domain::{Integer, Rational};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
+use symcas::prelude::*;
 
 const SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../oracle/sympy_expand.py");
 const VARS: [&str; 4] = ["x", "y", "z", "w"];
@@ -252,7 +252,7 @@ pub(crate) fn run(args: &[String]) -> ExitCode {
             break 'pts; // 该式取不到可求值点，弃式重生成
         }
         if pts.len() == PTS_PER_CASE {
-            texts.push(cas::plain(&ctx, &e));
+            texts.push(symcas::plain(&ctx, &e));
             corpus.push((e, pts));
         }
     }

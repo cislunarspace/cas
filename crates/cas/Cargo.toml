@@ -1,10 +1,15 @@
 [package]
-name = "cas"
+name = "symcas"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "cas：Rust 通用符号代数引擎（编排 facade）"
+description = "symcas: Fast, deterministic computer algebra system in Rust"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 cas-domain = { workspace = true }
@@ -14,4 +19,4 @@ cas-parse = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-cas-expr = { path = "../../crates/expr", features = ["test-gen"] }
+cas-expr = { version = "0.1.0", path = "../../crates/expr", features = ["test-gen"] }

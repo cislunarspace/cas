@@ -2,10 +2,10 @@
 //!
 //! expand (1+x+y+z+w)^20（设计 §7 的 expand 基准家族）与 sympy 单次对照。
 
-use cas::prelude::*;
 use cas_expr::Kind;
 use std::process::ExitCode;
 use std::time::Instant;
+use symcas::prelude::*;
 
 pub(crate) fn run(_args: &[String]) -> ExitCode {
     let ctx = Context::new();
