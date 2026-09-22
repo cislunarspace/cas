@@ -1,0 +1,40 @@
+# Rust 检查与测试门禁：rustfmt、clippy、全量测试（含 doctest 与属性测试）。
+# Action 版本策略：统一跟踪 major tag（checkout@v4 等），升级一律经 PR 审查，不 pin SHA。
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+# 同分支新推送到来时取消旧运行，节省 CI 资源
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: test（含 doctest 与属性测试）
+        run: cargo test --workspace --locked
