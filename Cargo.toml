@@ -22,7 +22,7 @@ categories = ["mathematics", "science"]
 keywords = ["cas", "computer-algebra", "symbolic", "mathematics"]
 
 [workspace.dependencies]
-num-bigint = "0.4"
+num-bigint = "0.5"
 num-integer = "0.1"
 proptest = "1"
 cas-domain = { version = "0.1.0", path = "crates/domain" }
