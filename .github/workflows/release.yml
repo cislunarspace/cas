@@ -1,0 +1,27 @@
+# 推送 v* 标签时自动创建 GitHub Release，变更日志由 GitHub 自动生成。
+# 不含 crates.io 发布（需要 CARGO_REGISTRY_TOKEN secret，暂不引入）。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 创建 GitHub Release（自动生成变更日志）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag

@@ -4,6 +4,21 @@ Fast, deterministic computer algebra system in Rust.
 
 `symcas` provides a canonical expression arena with hash-consing, exact arithmetic over arbitrary precision rational numbers, ordered sparse multivariate polynomials, symbolic differentiation, series expansions, directed simplifications, roundtrip plain parsing, and LaTeX rendering.
 
+**English** | [简体中文](README.zh-CN.md)
+
+[![CI](https://github.com/cislunarspace/cas/actions/workflows/ci.yml/badge.svg)](https://github.com/cislunarspace/cas/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/symcas)](https://crates.io/crates/symcas)
+[![Docs.rs](https://docs.rs/symcas/badge.svg)](https://docs.rs/symcas)
+[![License](https://img.shields.io/crates/l/symcas)](#license)
+
+## Contents
+
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Quickstart](#quickstart)
+- [Documentation](#documentation)
+- [License](#license)
+
 ## Key Features
 
 - **Canonical Construction & O(1) Equality**: Expressions are automatically normalized upon construction through flattening, term sorting, exact arithmetic folding, and like-term combination. Equivalent expressions within the same `Context` share an identical arena handle (`Expr::raw_id`).
@@ -32,10 +47,28 @@ Add `symcas` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-symcas = "0.1.0"
+symcas = "0.1"
 ```
 
+Requires Rust 1.85+ (enforced via `rust-version` in Cargo.toml).
+
+### Basic Workflow
+
+Every symcas session follows the same standard procedure:
+
+1. **Create a `Context`**, the arena that owns every expression: `Context::new()`.
+2. **Create atoms**: `ctx.sym("x")` for symbols, `ctx.int(2)` for integers, `ctx.int(1) / ctx.int(2)` for exact rationals; declare several symbols at once with `sym!(&ctx, x, y)`.
+3. **Build or parse an expression**: combine atoms with `+`, `-`, `*`, `/`, `.pow(n)` and `ctx.call("sin", &[x.clone()])`, or read text with `symcas::parse(&ctx, "sin(x)^2")`. Construction canonicalizes immediately.
+4. **Transform it**: `ctx.expand(&e)`, `ctx.simplify(&e)`, `ctx.diff(&e, &x)`, `ctx.taylor(&e, &x, 0, 4)`, `ctx.subst(&e, &[("x", v)])`, `ctx.cancel(&e)`, `ctx.factor(&e)`.
+5. **Output the result**: `symcas::plain(&ctx, &e)` (roundtrip-safe machine format) or `symcas::latex(&ctx, &e)` (publication-ready).
+
+Each example below applies this procedure to one scenario.
+
 ### 1. Expressions & Canonical Form
+
+*Use this to tell whether two differently written formulas are the same math:*
+
+$$ (x + y)^{2} = x^{2} + 2xy + y^{2} \qquad x + x = 2x $$
 
 ```rust
 use symcas::prelude::*;
@@ -56,6 +89,10 @@ assert!(a == b);
 
 ### 2. Parsing & Roundtrip Guarantee
 
+*Use this to normalize loosely written input into one deterministic canonical form:*
+
+$$ x + x + \frac{1}{2}x \;\to\; \frac{5}{2}x $$
+
 ```rust
 use symcas::prelude::*;
 
@@ -69,6 +106,10 @@ assert!(back == e);
 ```
 
 ### 3. Expansion, Simplification & Substitution
+
+*Use this to verify hand-derived identities and declutter expressions:*
+
+$$ (x + y)^{2} = x^{2} + y^{2} + 2xy \qquad \sin^{2}x + \cos^{2}x = 1 $$
 
 ```rust
 use symcas::prelude::*;
@@ -93,6 +134,12 @@ assert_eq!(symcas::plain(&ctx, &sim), "1");
 
 ### 4. Differentiation & Taylor Expansion
 
+*Use this to compute derivatives too tedious by hand and local series approximations:*
+
+$$ \frac{\mathrm{d}}{\mathrm{d}x}\left(\sin(x)\,x^{2}\right) = 2x\sin(x) + x^{2}\cos(x) $$
+
+$$ e^{x} = 1 + x + \frac{x^{2}}{2} + \frac{x^{3}}{6} + \frac{x^{4}}{24} + \cdots $$
+
 ```rust
 use symcas::prelude::*;
 
@@ -112,6 +159,10 @@ assert_eq!(symcas::plain(&ctx, &s), "1 + x + 1/24*x^4 + 1/6*x^3 + 1/2*x^2");
 
 ### 5. Rational Reduction & Polynomial Operations
 
+*Use this to cancel common factors in rational expressions and expose roots by factoring:*
+
+$$ \frac{x^{2} - 1}{x - 1} = x + 1 \qquad x^{2} - 4 = (x - 2)(x + 2) $$
+
 ```rust
 use symcas::prelude::*;
 
@@ -128,6 +179,12 @@ let poly = x.clone().pow(2) - ctx.int(4);
 let factored = ctx.factor(&poly);
 assert_eq!(symcas::plain(&ctx, &factored), "(-2 + x)*(2 + x)");
 ```
+
+## Documentation
+
+- [DESIGN.md](DESIGN.md): design document (Chinese), covering goals, decisions D1 to D6, and acceptance criteria
+- [MATLAB-PARITY.md](MATLAB-PARITY.md): feature parity status against MATLAB Symbolic Math Toolbox
+- API reference on [docs.rs](https://docs.rs/symcas)
 
 ## License
 
