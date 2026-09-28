@@ -1,0 +1,36 @@
+name: Bug report
+description: Something works incorrectly or crashes
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: symcas version
+      description: Output of `cargo tree -i symcas` or the version in your Cargo.toml
+    validations:
+      required: true
+  - type: input
+    id: rust
+    attributes:
+      label: Rust version
+      description: Output of `rustc -V`
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [Linux, macOS, Windows]
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A self-contained code snippet that reproduces the issue
+      render: rust
+    validations:
+      required: true
